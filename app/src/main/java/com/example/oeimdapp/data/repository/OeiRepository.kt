@@ -4,20 +4,27 @@ import com.example.oeimdapp.data.local.ItemCountDao
 import com.example.oeimdapp.data.local.ItemCountEntity
 import com.example.oeimdapp.data.model.ApiResponse
 import com.example.oeimdapp.data.remote.ApiService
+import com.example.oeimdapp.data.remote.RetrofitClient
 import kotlinx.coroutines.flow.Flow
 
 class OeiRepository(
     private val apiService: ApiService,
     private val itemCountDao: ItemCountDao
 ) {
-    // Fungsi untuk menarik data terbaru dari Google Sheets via Apps Script
-    suspend fun syncFromServer(token: String, noCache: Int? = null): ApiResponse {
-        return apiService.syncData(token = token, noCache = noCache)
+    // Menarik data terbaru dari Google Sheets menggunakan URL & Token dari Pengaturan
+    suspend fun syncFromServer(webAppUrl: String, token: String, noCache: Int? = null): ApiResponse {
+        val cleanUrl = RetrofitClient.cleanWebAppUrl(webAppUrl)
+        return apiService.syncData(url = cleanUrl, token = token.trim(), noCache = noCache)
     }
 
-    // Mengambil data hitungan stok dari database lokal (Room)
+    // Mengambil data hitungan stok untuk satu list
     fun getCountsForList(storeId: String, listId: String): Flow<List<ItemCountEntity>> {
         return itemCountDao.getCountsForList(storeId, listId)
+    }
+
+    // Mengambil data hitungan stok untuk seluruh list pada satu toko
+    fun getCountsForStore(storeId: String): Flow<List<ItemCountEntity>> {
+        return itemCountDao.getCountsForStore(storeId)
     }
 
     // Menyimpan atau memperbarui angka yang diisi MD (− / + / ketik manual)
@@ -29,6 +36,13 @@ class OeiRepository(
             count = count
         )
         itemCountDao.upsertCount(entity)
+    }
+
+    // Memulihkan data hitungan setelah Clear dibatalkan (Urungkan)
+    suspend fun restoreCounts(items: List<ItemCountEntity>) {
+        if (items.isNotEmpty()) {
+            itemCountDao.upsertCounts(items)
+        }
     }
 
     // Menghapus hitungan pada list tertentu (Clear list ini)
