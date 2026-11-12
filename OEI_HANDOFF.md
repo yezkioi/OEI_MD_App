@@ -255,6 +255,32 @@ Sistem desain ini merupakan hasil perpaduan final yang telah diuji pada prototip
    - **Dialog Verifikasi:** Menampilkan nama file otomatis (`LPxxxx-ddMMyyyy-NamaMD-NamaToko.xlsx`), daftar seluruh list toko beserta status (**Belum dibuka / Semua 0 / Terisi**), banner peringatan jika ada list belum dibuka atau semuanya 0, serta kotak centang wajib **"Saya sudah memeriksa semua list"**.
    - **Pratinjau & Output Sheet:** Header laporan (`LAPORAN PENGECEKAN STOK`, Toko, Nama MD, Tanggal cek, ID Laporan), diikuti tabel per list dengan jarak 4 baris kosong bersih antartabel tanpa teks label pemisah tambahan, lalu tombol **Simpan Download** dan **Bagikan File**.
 
+### 7.5 Detail Mikro Interaksi, Proporsi & Edge Cases (Wajib Diterapkan)
+1. **Rasio Aspek Bingkai Gambar Dinamis:**
+   - Item `Vertical` pada list `pisah_orientasi == true` (MP/SMP): rasio aspek `4 : 4.6` (`aspectRatio(4f / 4.6f)`).
+   - Item `Horizontal` pada list `pisah_orientasi == true` (MP/SMP): rasio aspek `4 : 3` (`aspectRatio(4f / 3f)`).
+   - Item pada list non-orientasi (`pisah_orientasi == false`, seperti `GC`): rasio kotak `1 : 1` (`aspectRatio(1f)`).
+   - Kartu khusus `ALIAS-000`: rasio kotak `1 : 1` (`aspectRatio(1f)`).
+2. **Perilaku *Auto-Replace* pada Modal Numeric Keypad:**
+   - Saat modal keypad terbuka, nilai lama berada dalam status *pristine* (terpilih penuh). Ketukan digit pertama (`0–9`) langsung **mengganti** nilai lama (bukan menempel di belakangnya), kecuali pengguna menekan `⌫` terlebih dahulu.
+   - Batas maksimal input adalah **4 digit** (`0` hingga `9999`), tidak menerima nilai negatif maupun tanda desimal.
+3. **State Loading & Error Gambar (Coil):**
+   - Saat gambar Google Drive sedang diunduh: tampilkan indikator *loading* halus (*shimmer* atau `CircularProgressIndicator` kecil) di tengah bingkai gambar.
+   - Jika gambar gagal dimuat (misalnya saat offline dan belum tersimpan di *disk cache* Coil): tampilkan ikon *broken image* netral + teks kode `ALIAS-KODE` di tengah bingkai agar kartu tetap jelas terbaca.
+4. **Detail Isi Dialog Zoom Lightbox:**
+   - Header dialog: label kode `ALIAS-KODE` tebal, badge `★ Best Seller` (jika `best_seller == true`), subjudul orientasi (`Vertical` / `Horizontal`), dan tombol tutup `×`.
+   - Area gambar utama: bingkai kotak berlatar `#FFFFFF` (Light Mode) atau `#090D16` (Dark Mode) dengan sudut membulat (`16.dp`) yang memuat gambar penuh.
+   - Footer dialog: keterangan `Target: X pcs`, teks status berwarna (`Status: Habis` merah / `Kurang X pcs` kuning-oranye / `Penuh ✓` hijau), serta kontrol stepper `− [angka] +` yang langsung memperbarui jumlah item.
+5. **Token Warna Spesifik Lencana `★ Best` & Kartu `ALIAS-000`:**
+   - Lencana `★ Best` (pojok kiri atas gambar): latar gelap semi-transparan `#020617` (`alpha = 0.85f`) dengan teks emas `#FCD34D` pada **kedua tema** (Light & Dark) agar kontras di atas ilustrasi terang maupun gelap.
+   - Kartu `ALIAS-000`: garis tepi putus-putus (*dashed* `2.dp`) berwarna `#CBD5E1` (Light Mode) dan `#334155` (Dark Mode), dengan kotak placeholder *"Di luar list"* berlatar `#F1F5F9` (Light) atau `#1E293B` (Dark).
+6. **UX Pencarian Toko (`StoreSearchScreen`):**
+   - Kolom pencarian wajib dilengkapi tombol hapus cepat **`×`** di ujung kanan yang muncul saat kolom berisi teks.
+   - Jika hasil filter kosong (tidak cocok dengan `nama_toko` maupun `area_cakupan`), tampilkan *Empty State* berupa kotak ber-border putus-putus dengan pesan *"Toko tidak ditemukan"* beserta kata kunci yang diketik.
+7. **Aturan Layar Awal (*Start Destination*):**
+   - Saat aplikasi dibuka (*cold start*): jika `webAppUrl` atau `appToken` di `SettingPreferences` masih kosong, arahkan langsung ke `SettingsScreen` untuk konfigurasi awal.
+   - Jika konfigurasi sudah terisi, buka `StoreSearchScreen` sebagai layar utama (menampilkan kartu pintasan **"Toko Terakhir Dibuka"** di bagian paling atas jika riwayat toko terakhir tersimpan di `SettingPreferences`).
+
 ---
 
 ## 8. Status saat ini
@@ -263,7 +289,7 @@ Sistem desain ini merupakan hasil perpaduan final yang telah diuji pada prototip
 - Analisis, arsitektur, struktur Sheets, aturan bisnis (bagian 4–5).
 - Google Sheets & Apps Script Web App sudah diverifikasi berjalan lancar dan berhasil menampilkan JSON `sync` tanpa error.
 - **Lapisan data aplikasi Android** (`ApiResponse.kt`, `ApiService.kt`, `RetrofitClient.kt`, `ItemCountEntity.kt`, `ItemCountDao.kt`, `AppDatabase.kt`, `OeiRepository.kt`, `SettingPreferences.kt`, dan struktur awal `MainViewModel.kt`) sudah dibuat oleh pengguna di Android Studio.
-- **Perancangan & Prototipe UI/UX Hybrid** telah selesai diuji dan dikunci dalam **Bagian 7 (Pedoman Lengkap UI/UX Final)**.
+- **Perancangan & Prototipe UI/UX Hybrid** telah selesai diuji dan dikunci lengkap beserta detail mikronya dalam **Bagian 7 (Pedoman Lengkap UI/UX Final)**.
 
 **Belum dikerjakan:**
 - Implementasi kode Jetpack Compose untuk tema (`Theme.kt`, `Color.kt`, `Type.kt`), komponen UI (`StoreSearchScreen.kt`, `StoreScreen.kt`, `SettingsScreen.kt`, dialog/modal), pembaruan `RetrofitClient` agar dinamis membaca URL dari `SettingPreferences`, serta generator file `.xlsx` lokal.
