@@ -31,6 +31,7 @@
 
 - Bahasa: **Indonesia**.
 - Pengguna **tidak berlangganan Claude Code**. Ia mengetik kode **manual di Android Studio** berdasarkan panduan dan kode yang kamu berikan. Jadi kode harus lengkap, tepat letak filenya, dan bisa disalin.
+- **Keahlian UI/UX: 0 (Nol).** Seluruh tampilan layar (UI) dan pengalaman pengguna (UX) **wajib dibuatkan dan didesain secara lengkap oleh AI** dengan standar seperti dikerjakan oleh desainer UI/UX profesional (bersih, modern, intuitif, ramah penggunaan satu tangan di lapangan).
 - Kerjakan **bertahap**, jangan memberi seluruh kode sekaligus. Tahap berikutnya hanya setelah pengguna setuju.
 - Pengguna **menghemat prompt**: kumpulkan pertanyaan dalam satu giliran (maksimal beberapa poin), berikan hasil yang lengkap dan sudah diuji, jangan bolak-balik.
 - **Uji dan verifikasi dulu sebelum mengirim.** Pengguna menegur ketika ada yang cacat (contoh: dropdown dinamis di xlsx awalnya tidak bekerja; itu kesalahan pengujian).
@@ -179,15 +180,15 @@ Apps Script **read-only** terikat ke spreadsheet. Web App: Execute as *Me*, acce
 
 **Selesai dan diuji:**
 - Analisis, arsitektur, struktur Sheets, aturan bisnis (bagian 4–5).
-- `database_OEI.xlsx` (sudah diunggah dan dijadikan Google Sheets oleh pengguna) dan `Code.gs` (sudah dideploy). Pengguna **sudah mencoba dan JSON data Sheets berhasil tampil**.
-- Pengujian yang dilakukan sebelumnya: rumus xlsx lewat LibreOffice, logika Code.gs lewat simulasi layanan Apps Script (urutan, hash, cache, list generic, Carousel, token).
+- Google Sheets & Apps Script Web App sudah diverifikasi berjalan lancar dan berhasil menampilkan JSON `sync` tanpa error.
+- **Lapisan data aplikasi Android** (Retrofit models, ApiService, RetrofitClient, Room Database, OeiRepository, SettingPreferences, dan struktur dasar `MainViewModel`) sudah selesai dibuat.
 
-**Belum dikerjakan: seluruh aplikasi Android.**
+**Belum dikerjakan:** 
+- Seluruh tampilan antarmuka (UI) Android dan logika navigasinya.
 
 **Catatan dan risiko terbuka:**
-- **[BELUM DIVERIFIKASI]** Dropdown dinamis lintas tab di Google Sheets (bug awal: rumus validasi ditulis dengan `=` di depan, sudah diperbaiki; di LibreOffice terbaca benar, di Google Sheets belum dikonfirmasi pengguna).
-- **[BELUM DIVERIFIKASI]** Proteksi kolom ⚙ belum aktif; WH perlu mengaturnya manual di Google Sheets (langkah ada di tab PETUNJUK).
-- **[BELUM DIVERIFIKASI]** Web App Apps Script melakukan redirect ke domain googleusercontent; pastikan Retrofit/OkHttp mengikuti redirect GET (biasanya default) dan uji nyata di aplikasi.
+- Proteksi kolom ⚙ belum aktif; WH perlu mengaturnya manual di Google Sheets (langkah ada di tab PETUNJUK).
+- Web App Apps Script melakukan redirect ke domain googleusercontent; pastikan Retrofit/OkHttp mengikuti redirect GET (biasanya default) dan uji nyata di aplikasi Android.
 - Thumbnail Drive tidak resmi dan kadang dibatasi saat banyak gambar dimuat sekaligus: perlu fallback dan cache Coil.
 - Token tertanam di APK bisa diekstrak; aman karena data read-only dan tidak rahasia.
 - Perubahan WH sampai ke aplikasi dalam ≤ 5 menit (cache server).
@@ -198,19 +199,17 @@ Apps Script **read-only** terikat ke spreadsheet. Web App: Execute as *Me*, acce
 
 ## 8. Rencana langkah berikut (menunggu persetujuan tiap tahap)
 
-1. **Setup proyek Android Studio:** versi Kotlin/Compose/AGP, minSdk, dependensi (Compose, Retrofit/OkHttp + JSON, Room, Coil, navigasi), struktur paket, izin (internet). Tanyakan versi Android Studio dan perangkat uji MD hanya jika diperlukan.
-2. **Lapisan data:** model sesuai JSON di bagian 6, klien API (URL + token dari pengaturan, jangan ditanam di chat), Room (entitas hitungan, cache list/toko, profil MD, counter LP), repositori sinkron + deteksi perubahan hash.
-3. **Layar profil (nama MD) + pengaturan** (URL Web App dan token).
-4. **Layar cari toko** (suggestion, search, toko terakhir).
-5. **Layar kerja toko:** tombol list + progres, tab Vertical/Horizontal, grid 3 kolom, kartu hitung (−/+/ketik), warna, kartu `-000`, Clear + Urungkan, persistensi.
-6. **Export:** dialog verifikasi, penulis XLSX, simpan ke Download, bagikan; uji terbuka di Google Sheets.
-7. **Poles dan rilis:** offline, penanganan galat sinyal, ikon, build APK (debug, lalu signed release) dan uji di perangkat MD.
+1. **Setup proyek Android Studio & Lapisan Data:** (SELESAI)
+2. **Perancangan & Pembuatan UI/UX Profesional (Jetpack Compose):** 
+   - Karena pengguna memiliki keahlian UI/UX 0, **seluruh kode UI (tampilan) akan dirancang, didesain, dan dibuatkan secara lengkap oleh AI** dengan standar profesional (tampilan bersih, elegan, dan sangat intuitif untuk penggunaan satu tangan di lapangan oleh MD).
+   - Meliputi: Layar Pengaturan & Profil MD, Layar Cari Toko (dengan *suggestion* & toko terakhir), Layar Utama Toko (dengan baris tombol list & progres), Layar Grid Item (tab Vertical/Horizontal, kartu stok dengan warna indikator, kartu `-000`), Dialog Clear & Urungkan, serta Dialog Verifikasi & Tombol Export XLSX.
+3. **Poles dan rilis:** offline, penanganan galat sinyal, ikon, build APK (debug, lalu signed release) dan uji di perangkat MD.
 
-**Permintaan pertama untuk chat baru:** lanjutkan dari Langkah 1. Tanyakan hanya hal yang benar-benar perlu (mis. versi Android Studio, minSdk), lalu pandu pengguna membuat proyek dan menyalin kode secara bertahap.
+**Permintaan pertama untuk chat baru:** lanjutkan dari Langkah 2 (pembuatan UI/UX profesional dengan Jetpack Compose). Ingat bahwa pengguna awam UI/UX, sehingga setiap komponen UI harus diberikan kodenya secara lengkap, bersih, siap salin, dengan desain layaknya desainer profesional.
 
 ---
 
 ## 9. Berkas yang dimiliki pengguna
 
-- `database_OEI.xlsx` (sudah jadi Google Sheets di Drive pengguna) dan `Code.gs` (sudah dideploy). Jika kamu perlu memeriksa isinya, minta pengguna melampirkan keduanya atau hasil JSON `sync`-nya (tanpa token).
+- `database_OEI.xlsx` (sudah jadi Google Sheets di pengguna) dan `Code.gs` (sudah dideploy dan sukses merender JSON).
 - Sumber data contoh: PDF "MP_SMP_Balizen_sanur" dan gambar list "Greeting Cards - Small Display".
