@@ -1,18 +1,31 @@
 package com.example.oeimdapp.data.remote
 
+import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
-    // ⚠️ PERHATIAN: Ganti URL di bawah ini dengan URL Web App Google Apps Script Anda yang asli!
-    // Contoh: "https://script.google.com/macros/s/AKfycbx.../exec"
-    private const val BASE_URL = "https://script.google.com/macros/s/AKfycbwA5YZUSx1eAonPxTTAUikk6DYSiOp04U0KLqFV2GgkhHiZVNp--SPheDCMD23zXIscbw/exec"
+    private val okHttpClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .build()
+    }
 
     val apiService: ApiService by lazy {
         Retrofit.Builder()
-            .baseUrl(BASE_URL)
+            .baseUrl("https://script.google.com/")
+            .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(ApiService::class.java)
+    }
+
+    // Membersihkan spasi atau parameter ?token=... jika pengguna menyalin URL lengkap dari browser
+    fun cleanWebAppUrl(rawUrl: String): String {
+        return rawUrl.trim().substringBefore("?")
     }
 }
