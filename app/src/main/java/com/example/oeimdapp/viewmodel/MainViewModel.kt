@@ -50,7 +50,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     val isConfigured: Boolean
-        get() = webAppUrl.isNotBlank() && appToken.isNotBlank()
+        get() = (webAppUrl.startsWith("http://") || webAppUrl.startsWith("https://")) &&
+                appToken.isNotBlank()
 
     // ==========================================
     // 2. STATE DATA SINKRONISASI (OFFLINE-FIRST)
