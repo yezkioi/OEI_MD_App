@@ -1,4 +1,4 @@
-# OEI MD–WH App: Dokumen Serah Terima (Handoff 003)
+# OEI MD–WH App: Dokumen Serah Terima (Handoff 003.2)
 
 > Untuk AI di chat berikutnya: baca seluruh dokumen ini sebelum membalas. Ini rangkuman lengkap dari proyek **OEI MD App**. Semua keputusan di bagian **3, 4, 5, 6, dan 7 (Pedoman UI/UX Final)** **sudah dikunci dan disetujui pengguna — JANGAN diubah tanpa persetujuan eksplisit pengguna.**
 
@@ -30,8 +30,9 @@
 ## 2. Cara kerja pengguna (penting untuk gaya kerjamu)
 
 - Bahasa: **Indonesia**.
-- **Ini adalah proyek pengembangan aplikasi Android pertama pengguna.** Pengguna mengetik kode **manual di Android Studio** berdasarkan panduan dan kode yang diberikan AI. Jadi kode harus lengkap, tepat letak filenya, sebutkan **jenis file (`Class`, `Object`, `Interface`, atau `File`)** saat membuat file baru di Android Studio, dan siap disalin tanpa potongan kode yang dihilangkan.
-- **Keahlian UI/UX: 0 (Nol).** Seluruh tampilan layar (UI) dan pengalaman pengguna (UX) **wajib dibuatkan secara lengkap oleh AI** mengikuti **Bagian 7 (Pedoman Lengkap UI/UX Final)** yang telah disepakati melalui prototipe interaktif.
+- **Ini adalah proyek pengembangan aplikasi Android pertama pengguna.** Pengguna mengetik/menyalin kode **manual di Android Studio** berdasarkan panduan dan kode yang diberikan AI. Jadi kode harus lengkap, tepat letak filenya, sebutkan **jenis file (`Class`, `Object`, `Interface`, atau `File`)** saat membuat file baru di Android Studio, dan siap disalin tanpa potongan kode yang dihilangkan.
+- **Sertakan saran `Commit Message`** setiap kali memberikan pembaruan/penambahan kode yang krusial.
+- **Keahlian UI/UX: 0 (Nol).** Seluruh tampilan layar (UI) dan pengalaman pengguna (UX) mengikuti **Bagian 7 (Pedoman Lengkap UI/UX Final)** yang telah disepakati melalui prototipe interaktif dan sudah diimplementasikan ke kode Compose.
 - Kerjakan **bertahap**, jangan memberi seluruh kode sekaligus. Tahap berikutnya hanya setelah pengguna setuju.
 - Pengguna **menghemat prompt**: kumpulkan pertanyaan dalam satu giliran (maksimal beberapa poin), berikan hasil yang lengkap dan sudah diuji, jangan bolak-balik.
 - **Uji dan verifikasi dulu sebelum mengirim.**
@@ -45,13 +46,13 @@
 
 | Lapisan | Pilihan |
 |---|---|
-| Aplikasi | Kotlin + Jetpack Compose, MVVM (ViewModel + StateFlow / Compose State) |
+| Aplikasi | Kotlin + Jetpack Compose, MVVM (ViewModel + Compose State) |
 | Backend/DB | Google Sheets + Google Apps Script (Web App, **read-only**) |
-| Gambar | Google Drive (publik), dirender dengan **Coil**, cache disk |
-| Cache lokal | **Room** (data list + jumlah hitungan MD) |
+| Gambar | Google Drive (publik), dirender dengan **Coil** (`coil-compose`), cache disk |
+| Cache lokal | **Room** (data jumlah hitungan MD) + `SharedPreferences` (cache JSON `sync` terakhir untuk offline-first) |
 | Jaringan | Retrofit + OkHttp + Gson (`ApiResponse.kt`, `ApiService.kt`, `RetrofitClient.kt`) |
-| Preferensi | `SharedPreferences` (`SettingPreferences.kt`: Nama MD, URL Web App, Token, Counter ID Laporan, Tema) |
-| Export | File **.xlsx** ditulis lokal di HP. Usulan: penulis XLSX minimal sendiri (`ZipOutputStream` + XML) tanpa library berat seperti Apache POI |
+| Preferensi | `SharedPreferences` (`SettingPreferences.kt`: Nama MD, URL Web App, Token, Counter ID Laporan, Tema, Last Store ID, Cache JSON, Waktu Sync Terakhir) |
+| Export | File **.xlsx** ditulis lokal di HP menggunakan penulis XLSX murni Kotlin (`ZipOutputStream` + XML di `XlsxExporter.kt`) tanpa library berat seperti Apache POI |
 | Offline | Offline-first: data tersinkron disimpan di HP, bisa dipakai tanpa sinyal |
 
 Tidak ada penulisan balik ke Sheets, tidak ada WorkManager antrean upload (export murni lokal).
@@ -66,7 +67,7 @@ Tidak ada penulisan balik ke Sheets, tidak ada WorkManager antrean upload (expor
 - Nama MD, URL Web App, dan Token diambil dari **Pengaturan di aplikasi** (tersimpan di HP dan dapat diubah kapan saja lewat antarmuka).
 
 ### 4.2 Alur MD
-`Cari toko → tombol list toko di atas (list default langsung tampil) → update jumlah → Export / Clear`
+`Cek Konfigurasi Awal (jika kosong -> Pengaturan) → Cari toko → tombol list toko di atas (list default langsung tampil) → update jumlah → Export / Clear`
 
 1. **Pencarian toko** (kolom search): tidak peka huruf besar-kecil, cocok ke **nama toko** dan **area_cakupan** (ketik "Ubud" → toko ber-nama Ubud + toko di area Ubud). Saat mengetik muncul *suggestion* terdekat tanpa menekan tombol Search. Sebelum mengetik: pintasan toko terakhir dibuka. Urutan abjad "natural" (`Toko 2` sebelum `Toko 10`). Toko tanpa list aktif disembunyikan.
 2. **Halaman toko**: semua list toko tampil sebagai **baris tombol (pills) di atas**. List *default* langsung terbuka (list dengan `jenis_produk.urutan_tampil` terkecil, yaitu **MP**). Tombol berisi nama list + progres kecil (`terisi/total`, di mana `terisi` = jumlah item reguler dengan `count > 0` dan `total` = total item reguler pada list tersebut).
@@ -75,11 +76,11 @@ Tidak ada penulisan balik ke Sheets, tidak ada WorkManager antrean upload (expor
 5. **Grid 3 kolom**, lalu scroll ke bawah. Tiap kartu: **gambar di atas**, di bawahnya label `ALIAS-KODE` (contoh `MP-012`), target (`T:X`), lencana status (`Habis` / `Kurang X` / `Penuh ✓`), lalu **`− [angka] +` selebar penuh kartu tepat di bawah**. Angka bisa **diketik manual** (papan angka numerik, tidak boleh negatif, dengan tombol pintas *"Isi Sesuai Target"*). Ketuk gambar untuk memperbesar (*Zoom Lightbox*).
 6. **Warna kartu**: merah jika jumlah = 0 (`Habis`), kuning jika 0 < jumlah < target (`Kurang X`), hijau jika jumlah ≥ target (`Penuh ✓`). **Semua item mulai dari 0** (tidak ada status "belum dihitung / –"). Nilai 0 yang tidak diubah = stok 0, dijaga lewat dialog konfirmasi saat export.
 7. **Urutan item** dikirim server dalam field `urut` (jangan diurutkan ulang secara berbeda):
-   - List Standar: **best seller dulu → target terbesar → kode kecil ke besar** (mengikuti urutan list lama di PDF agar MD tidak kehilangan *muscle memory*).
-   - List Carousel: mengikuti kolom `posisi` (diatur WH).
+    - List Standar: **best seller dulu → target terbesar → kode kecil ke besar** (mengikuti urutan list lama di PDF agar MD tidak kehilangan *muscle memory*).
+    - List Carousel: mengikuti kolom `posisi` (diatur WH).
 8. **Kartu `alias-000`** (contoh `MP-000`, `GC-000`): satu baris tetap di tiap list untuk **jumlah produk di luar list**. Tampil di aplikasi sebagai kartu dengan **gambar kosong** (kotak abu-abu bertitik *"Di luar list"*), label, lencana *"Tanpa Target"*, tombol `−/+`, angka bisa diketik. Dibuat otomatis oleh aplikasi (tidak ada di Sheets).
-   - List `pisah_orientasi` (MP/SMP): ada kartu `-000` terpisah di tab Vertical dan tab Horizontal (angka terpisah). Saat export dijumlahkan.
-   - Jenis lain: satu kartu `-000` per list, diambil apa adanya.
+    - List `pisah_orientasi` (MP/SMP): ada kartu `-000` terpisah di tab Vertical (`000-V`) dan tab Horizontal (`000-H`) (angka terpisah). Saat export dijumlahkan.
+    - Jenis lain: satu kartu `-000` per list, diambil apa adanya.
 9. **Clear**: dua tingkat, *"Clear list ini"* dan *"Clear semua list toko ini"*. Wajib konfirmasi + opsi **Urungkan** 5 detik.
 10. **Data tersimpan di Room** per kombinasi `storeId + listId + kode`, jadi aman saat pindah list, aplikasi ditutup, HP restart. List generic yang dipakai dua toko tetap punya hitungan **terpisah per toko**.
 11. **Deteksi perubahan list**: tiap list punya `hash` dari server. Jika hash berubah saat sinkron, perbarui list dan tampilkan info *"List diperbarui oleh WH"*. Hitungan yang sudah diisi **dipertahankan per kode**, target yang berubah ikut diperbarui, item baru mulai dari 0, item yang dihapus WH hilang.
@@ -103,12 +104,12 @@ Tidak ada penulisan balik ke Sheets, tidak ada WorkManager antrean upload (expor
   (4 baris kosong murni tanpa teks label tambahan)
   <tabel list berikutnya, header sendiri>
   ```
-  - Urutan list = urutan `list_ids` toko (MP, SMP, lalu lainnya). Urutan baris dalam tabel = urutan tampil di aplikasi.
-  - **List MP/SMP dipecah menjadi dua tabel:** **Vertical dulu, lalu Horizontal**. Baris total `MP-000` (jumlah kartu −000 Vertical + Horizontal) hanya ada di **baris paling bawah tabel Vertical**. Tabel Horizontal tanpa baris `-000`. Jika list hanya punya item Horizontal, total `-000` ditaruh di tabel pertama yang ada.
-  - Jenis lain: satu tabel, baris `GC-000` di paling bawah.
-  - Baris `-000`: `Jumlah_Target` = `-`, `Stok_Dibutuhkan` = `-`, `Best_Seller` = `Tidak`. Dicetak tebal dengan garis atas, tanpa aksen merah.
-  - `Stok_Dibutuhkan = max(Target − Dihitung, 0)`.
-  - **Aksen merah:** jumlah 0 → seluruh baris latar merah muda + teks merah tebal; 0 < jumlah < target → sel `Stok_Dibutuhkan` merah; terpenuhi → tanpa warna. Format harus terbuka baik di Google Sheets.
+    - Urutan list = urutan `list_ids` toko (MP, SMP, lalu lainnya). Urutan baris dalam tabel = urutan tampil di aplikasi.
+    - **List MP/SMP dipecah menjadi dua tabel:** **Vertical dulu, lalu Horizontal**. Baris total `MP-000` (jumlah kartu −000 Vertical + Horizontal) hanya ada di **baris paling bawah tabel Vertical**. Tabel Horizontal tanpa baris `-000`. Jika list hanya punya item Horizontal, total `-000` ditaruh di tabel pertama yang ada.
+    - Jenis lain: satu tabel, baris `GC-000` di paling bawah.
+    - Baris `-000`: `Jumlah_Target` = `-`, `Stok_Dibutuhkan` = `-`, `Best_Seller` = `Tidak`. Dicetak tebal dengan garis atas, tanpa aksen merah.
+    - `Stok_Dibutuhkan = max(Target − Dihitung, 0)`.
+    - **Aksen merah:** jumlah 0 → seluruh baris latar merah muda + teks merah tebal; 0 < jumlah < target → sel `Stok_Dibutuhkan` merah; terpenuhi → tanpa warna. Format harus terbuka baik di Google Sheets.
 
 ---
 
@@ -179,7 +180,7 @@ Sistem desain ini merupakan hasil perpaduan final yang telah diuji pada prototip
 - **Mode Gelap (Dark Mode) = `Field Pro Dark`**: Latar obsidian gelap dengan pengisian warna kartu penuh kontras tinggi anti-silau untuk pencahayaan toko yang redup maupun terik.
 - **Ergonomi Lapangan (`Warm Craft`)**: Lencana status langsung **`Kurang X`** / **`Habis`** / **`Penuh ✓`**, bilah *stepper* **`− [angka] +`** selebar penuh di dasar kartu, serta **dok tombol mengambang berbentuk kapsul (*Floating Pill Dock*)** di bagian bawah layar.
 
-### 7.1 Aturan Larangan Regresi (Wajib Dipatuhi Saat Implementasi)
+### 7.1 Aturan Larangan Regresi (Wajib Dipatuhi)
 1. **TIDAK ADA teks deskripsi penjelasan pada pengaturan Tema:** Di layar Pengaturan, kontrol tema hanya berupa **3 tombol segmented yang intuitif** (`Ikuti Sistem` | `Terang` | `Gelap`), tanpa kotak teks penjelasan di bawahnya.
 2. **WAJIB menampilkan 2 kolom input untuk Sinkronisasi Google Sheets di Pengaturan:** Harus tersedia kolom input untuk **URL Web App (Link Script)** dan kolom input untuk **Token Akses** agar pengguna dapat mengganti sumber database sewaktu-waktu langsung dari aplikasi tanpa perlu mengubah kode/rebuild APK.
 3. **TIDAK ADA label teks pemisah tabel pada Pratinjau Export:** Pada tampilan pratinjau hasil Export maupun saat membangun file `.xlsx`, jarak antartabel cukup berupa baris kosong bersih tanpa teks keterangan buatan seperti *"4 baris pemisah tabel"*.
@@ -218,89 +219,96 @@ Sistem desain ini merupakan hasil perpaduan final yang telah diuji pada prototip
 - **Angka Tabular (`fontFeatureSettings = "tnum"`):** Wajib diterapkan pada kode item (`MP-015`), angka di tengah *stepper*, lencana progres list (`4/10`), serta papan ketik numerik agar angka tidak bergeser secara horizontal saat MD menekan tombol `+`/`−` dengan cepat.
 - **Label Kode Item:** Font monospace tebal (`Bold`) dengan tanda hubung (`MP-015`, `GC-172`).
 
-### 7.4 Spesifikasi Komponen Per Layar
-
-1. **Layar Pengaturan & Profil MD (`SettingsScreen`):**
-   - **Tema Tampilan:** Segmented button 3 pilihan sejajar: **`Ikuti Sistem`** (default) | **`Terang`** | **`Gelap`**. Tanpa teks deskripsi tambahan. Nilai disimpan di `SettingPreferences`.
-   - **Profil Merchandiser (MD):** Input teks `Nama Merchandiser (MD)`.
-   - **Sinkronisasi Google Sheets:**
-     - Input teks **URL Web App (Link Script)** (tersimpan di `SettingPreferences.webAppUrl`).
-     - Input teks **Token Akses** (tersimpan di `SettingPreferences.appToken`).
-     - Tombol aksi penuh **"Sinkronkan Data Sekarang"** (memanggil `syncData` dengan URL & Token yang tersimpan) + tombol **"Simpan & Kembali"**.
-
-2. **Layar Pencarian Toko (`StoreSearchScreen`):**
-   - Header dengan judul *"Pilih Toko Mitra"*, nama MD aktif, status sinkronisasi, dan tombol ikon Pengaturan (`⚙️`).
-   - Kolom pencarian real-time (mencocokkan `nama_toko` dan `area_cakupan`).
-   - Bagian pintasan **"Toko Terakhir Dibuka"** saat kolom pencarian kosong.
-   - Daftar seluruh toko aktif urut abjad *natural* dengan badge lokasi area (`📍 Sanur`) dan daftar list aktif.
-
-3. **Layar Utama Toko & Grid Item (`StoreScreen`):**
-   - **Top App Bar:** Tombol kembali ke Pencarian Toko, Nama Toko + badge area + indikator status sinkron & nama MD, serta tombol ikon Pengaturan (`⚙️`).
-   - **Baris Tombol List (`LazyRow`):** Urut `jenis_urutan`, berisi `nama_list` + lencana progres `terisi/total`.
-   - **Tab Orientasi (`Vertical` | `Horizontal`):** Segmented control 2 kolom, hanya tampil jika `pisah_orientasi == true`.
-   - **Grid 3 Kolom (`LazyVerticalGrid(GridCells.Fixed(3))`):**
-     - Padding bawah grid cukup lega (`~88.dp`) agar baris kartu paling bawah tidak tertutup dok mengambang.
-     - **Anatomi Kartu Produk (dari atas ke bawah):**
-       1. Bingkai gambar (`#FFFFFF` di Light Mode) + lencana pojok kiri atas `★ Best` jika `best_seller == true`. Ketuk gambar membuka **Dialog Zoom Lightbox** beserta kontrol `−/+`.
-       2. Strip metadata: Kode `ALIAS-KODE` di kiri, target `T:X` di kanan.
-       3. Lencana status selebar kartu: **`Habis`** / **`Kurang X`** / **`Penuh ✓`**.
-       4. **Full-Width Tactile Stepper Bar (`height = 36.dp`)** menempel rata di dasar kartu, dibagi 3 bagian sama lebar: `[ − ]` | `[ angka ]` | `[ + ]`. Ketuk angka membuka **Modal Numeric Keypad** (angka 0–9, `C`, `⌫`, tombol cepat *"Isi Sesuai Target (X)"*, dan `OK`).
-     - **Kartu `ALIAS-000`:** Ditempatkan di urutan terakhir grid dengan border putus-putus (`dashed`), kotak abu-abu bertitik *"Di luar list"*, badge *"Tanpa Target"*, dan *stepper* netral.
-   - **Floating Pill Dock (Dok Kapsul Mengambang di Bawah Layar):**
-     - Melayang dengan margin bawah `12.dp` dan samping `12.dp`, sudut membulat penuh (`CircleShape`), bayangan lembut (*elevation*).
-     - Kiri: Tombol kapsul **Clear** → membuka dialog 2 pilihan (*"Clear list ini"* dan *"Clear semua list toko ini"*). Setelah dieksekusi, muncul *Snackbar* mengambang di atas dok dengan tombol **Urungkan** selama 5 detik.
-     - Kanan: Tombol kapsul utama **Export XLSX** dilengkapi lencana jumlah list terisi (`X/Y`).
-
-4. **Dialog Verifikasi & Pratinjau Export XLSX:**
-   - **Dialog Verifikasi:** Menampilkan nama file otomatis (`LPxxxx-ddMMyyyy-NamaMD-NamaToko.xlsx`), daftar seluruh list toko beserta status (**Belum dibuka / Semua 0 / Terisi**), banner peringatan jika ada list belum dibuka atau semuanya 0, serta kotak centang wajib **"Saya sudah memeriksa semua list"**.
-   - **Pratinjau & Output Sheet:** Header laporan (`LAPORAN PENGECEKAN STOK`, Toko, Nama MD, Tanggal cek, ID Laporan), diikuti tabel per list dengan jarak 4 baris kosong bersih antartabel tanpa teks label pemisah tambahan, lalu tombol **Simpan Download** dan **Bagikan File**.
-
-### 7.5 Detail Mikro Interaksi, Proporsi & Edge Cases (Wajib Diterapkan)
-1. **Rasio Aspek Bingkai Gambar Dinamis:**
-   - Item `Vertical` pada list `pisah_orientasi == true` (MP/SMP): rasio aspek `4 : 4.6` (`aspectRatio(4f / 4.6f)`).
-   - Item `Horizontal` pada list `pisah_orientasi == true` (MP/SMP): rasio aspek `4 : 3` (`aspectRatio(4f / 3f)`).
-   - Item pada list non-orientasi (`pisah_orientasi == false`, seperti `GC`): rasio kotak `1 : 1` (`aspectRatio(1f)`).
-   - Kartu khusus `ALIAS-000`: rasio kotak `1 : 1` (`aspectRatio(1f)`).
-2. **Perilaku *Auto-Replace* pada Modal Numeric Keypad:**
-   - Saat modal keypad terbuka, nilai lama berada dalam status *pristine* (terpilih penuh). Ketukan digit pertama (`0–9`) langsung **mengganti** nilai lama (bukan menempel di belakangnya), kecuali pengguna menekan `⌫` terlebih dahulu.
-   - Batas maksimal input adalah **4 digit** (`0` hingga `9999`), tidak menerima nilai negatif maupun tanda desimal.
-3. **State Loading & Error Gambar (Coil):**
-   - Saat gambar Google Drive sedang diunduh: tampilkan indikator *loading* halus (*shimmer* atau `CircularProgressIndicator` kecil) di tengah bingkai gambar.
-   - Jika gambar gagal dimuat (misalnya saat offline dan belum tersimpan di *disk cache* Coil): tampilkan ikon *broken image* netral + teks kode `ALIAS-KODE` di tengah bingkai agar kartu tetap jelas terbaca.
-4. **Detail Isi Dialog Zoom Lightbox:**
-   - Header dialog: label kode `ALIAS-KODE` tebal, badge `★ Best Seller` (jika `best_seller == true`), subjudul orientasi (`Vertical` / `Horizontal`), dan tombol tutup `×`.
-   - Area gambar utama: bingkai kotak berlatar `#FFFFFF` (Light Mode) atau `#090D16` (Dark Mode) dengan sudut membulat (`16.dp`) yang memuat gambar penuh.
-   - Footer dialog: keterangan `Target: X pcs`, teks status berwarna (`Status: Habis` merah / `Kurang X pcs` kuning-oranye / `Penuh ✓` hijau), serta kontrol stepper `− [angka] +` yang langsung memperbarui jumlah item.
-5. **Token Warna Spesifik Lencana `★ Best` & Kartu `ALIAS-000`:**
-   - Lencana `★ Best` (pojok kiri atas gambar): latar gelap semi-transparan `#020617` (`alpha = 0.85f`) dengan teks emas `#FCD34D` pada **kedua tema** (Light & Dark) agar kontras di atas ilustrasi terang maupun gelap.
-   - Kartu `ALIAS-000`: garis tepi putus-putus (*dashed* `2.dp`) berwarna `#CBD5E1` (Light Mode) dan `#334155` (Dark Mode), dengan kotak placeholder *"Di luar list"* berlatar `#F1F5F9` (Light) atau `#1E293B` (Dark).
-6. **UX Pencarian Toko (`StoreSearchScreen`):**
-   - Kolom pencarian wajib dilengkapi tombol hapus cepat **`×`** di ujung kanan yang muncul saat kolom berisi teks.
-   - Jika hasil filter kosong (tidak cocok dengan `nama_toko` maupun `area_cakupan`), tampilkan *Empty State* berupa kotak ber-border putus-putus dengan pesan *"Toko tidak ditemukan"* beserta kata kunci yang diketik.
-7. **Aturan Layar Awal (*Start Destination*):**
-   - Saat aplikasi dibuka (*cold start*): jika `webAppUrl` atau `appToken` di `SettingPreferences` masih kosong, arahkan langsung ke `SettingsScreen` untuk konfigurasi awal.
-   - Jika konfigurasi sudah terisi, buka `StoreSearchScreen` sebagai layar utama (menampilkan kartu pintasan **"Toko Terakhir Dibuka"** di bagian paling atas jika riwayat toko terakhir tersimpan di `SettingPreferences`).
+### 7.4 Spesifikasi Komponen & Detail Mikro
+1. **Layar Pengaturan (`SettingsScreen`):** Segmented button 3 pilihan (`Ikuti Sistem` | `Terang` | `Gelap`), input `Nama Merchandiser (MD)`, input `URL Web App (Link Script)`, input `Token Akses`, tombol `"Sinkronkan Data Sekarang"` & `"Simpan & Kembali"`.
+2. **Layar Pencarian Toko (`StoreSearchScreen`):** Pencarian real-time (`nama_toko` & `area_cakupan`) dengan tombol hapus `×`, kartu pintasan `"Toko Terakhir Dibuka"`, urutan abjad *natural*, *Empty State* ber-border putus-putus.
+3. **Layar Utama Toko (`StoreScreen` & `StoreDialogs`):**
+    - Rasio bingkai gambar dinamis: `Vertical` (`4:4.6`), `Horizontal` (`4:3`), non-orientasi (`1:1`), kartu `ALIAS-000` (`1:1`).
+    - Lencana `★ Best` universal (`#020617` alpha 85% dengan teks emas `#FCD34D`).
+    - Full-width tactile stepper `36.dp` (`[ − ] | [ angka ] | [ + ]`), Modal Numeric Keypad dengan perilaku *auto-replace* nilai awal + tombol pintas *"Isi Sesuai Target"*, Zoom Lightbox dengan stepper langsung, Dialog Clear 2 tingkat + Snackbar **Urungkan** 5 detik, dan Floating Pill Dock.
+4. **Aturan Layar Awal (*Start Destination*):**
+    - Saat aplikasi dibuka (*cold start*): wajib mengecek apakah `webAppUrl` (diawali `http://` atau `https://`) dan `appToken` sudah terisi di `SettingPreferences`. Jika belum terisi, **langsung buka `SettingsScreen`** dan **jangan memanggil endpoint `sync`**.
 
 ---
 
-## 8. Status saat ini
+## 8. Status saat ini (Peta Kode Lengkap)
 
-**Selesai dan diuji:**
-- Analisis, arsitektur, struktur Sheets, aturan bisnis (bagian 4–5).
-- Google Sheets & Apps Script Web App sudah diverifikasi berjalan lancar dan berhasil menampilkan JSON `sync` tanpa error.
-- **Lapisan data aplikasi Android** (`ApiResponse.kt`, `ApiService.kt`, `RetrofitClient.kt`, `ItemCountEntity.kt`, `ItemCountDao.kt`, `AppDatabase.kt`, `OeiRepository.kt`, `SettingPreferences.kt`, dan struktur awal `MainViewModel.kt`) sudah dibuat oleh pengguna di Android Studio.
-- **Perancangan & Prototipe UI/UX Hybrid** telah selesai diuji dan dikunci lengkap beserta detail mikronya dalam **Bagian 7 (Pedoman Lengkap UI/UX Final)**.
+**Seluruh kode aplikasi Android telah selesai ditulis** di dalam proyek `D:\Project Android\OEIMDApp\` (package `com.example.oeimdapp`):
 
-**Belum dikerjakan:**
-- Implementasi kode Jetpack Compose untuk tema (`Theme.kt`, `Color.kt`, `Type.kt`), komponen UI (`StoreSearchScreen.kt`, `StoreScreen.kt`, `SettingsScreen.kt`, dialog/modal), pembaruan `RetrofitClient` agar dinamis membaca URL dari `SettingPreferences`, serta generator file `.xlsx` lokal.
+1. **Lapisan Data & Jaringan:**
+    - `data/model/ApiResponse.kt` — DTO lengkap respons JSON `sync`.
+    - `data/remote/ApiService.kt` — Endpoint dinamis `@Url` untuk `ping` dan `sync`.
+    - `data/remote/RetrofitClient.kt` — OkHttp timeout 20–30 detik + `cleanWebAppUrl()`.
+    - `data/local/ItemCountEntity.kt` — Tabel Room `item_counts` (`primaryKeys = ["storeId", "listId", "kode"]`).
+    - `data/local/ItemCountDao.kt` — Query & Upsert per list / per toko + restore backup Undo.
+    - `data/local/AppDatabase.kt` — Singleton Room database `oei_md_database`.
+    - `data/repository/OeiRepository.kt` — Jembatan Retrofit & Room.
+    - `data/prefs/SettingPreferences.kt` — Penyimpanan `mdName`, `webAppUrl`, `appToken`, `reportCounter`, `themeMode`, `lastStoreId`, `cachedSyncJson`, `lastSyncTime`.
+2. **Logika & State:**
+    - `viewmodel/MainViewModel.kt` — State layar, theme switcher, offline cache JSON, deteksi perubahan hash list WH, natural sort, Clear + Undo 5 detik, counter laporan.
+3. **Antarmuka Pengguna (Jetpack Compose):**
+    - `ui/theme/Color.kt`, `ui/theme/Type.kt`, `ui/theme/Theme.kt` — Dual theme *Gallery Crisp* & *Field Pro Dark*.
+    - `ui/screens/SettingsScreen.kt` — Layar Pengaturan.
+    - `ui/screens/StoreSearchScreen.kt` — Layar Pencarian Toko.
+    - `ui/screens/StoreDialogs.kt` — Modal Numeric Keypad, Zoom Lightbox, Clear Confirm Dialog.
+    - `ui/screens/StoreScreen.kt` — Layar Utama Toko, grid 3 kolom, stepper, kartu `-000`, Floating Pill Dock.
+4. **Export XLSX & Navigasi Utama:**
+    - `export/XlsxExporter.kt` — Generator `.xlsx` murni Kotlin (`ZipOutputStream` + OpenXML) dengan pewarnaan merah otomatis, simpan ke `MediaStore.Downloads`, dan share via `FileProvider`.
+    - `ui/screens/ExportDialog.kt` — Dialog verifikasi list, kotak centang wajib, & pratinjau tabel.
+    - `MainActivity.kt` — Navigasi antar layar, pengecekan `isConfigured` saat cold start, & `BackHandler`.
+    - `res/xml/file_paths.xml` & `AndroidManifest.xml` — Izin `INTERNET` dan konfigurasi `FileProvider`.
 
 ---
 
-## 9. Rencana langkah berikut (menunggu persetujuan tiap tahap)
+## 9. Masalah Teknis Aktif (Prioritas Utama untuk Diselesaikan Terlebih Dahulu)
 
-1. **Setup Proyek Android Studio & Lapisan Data:** (SELESAI)
-2. **Perancangan & Persetujuan Prototipe UI/UX Hybrid:** (SELESAI & DIKUNCI di Bagian 7)
-3. **Implementasi Kode UI Jetpack Compose & State di Android Studio (Tahap Berikutnya):**
-   - Menambahkan pengaturan tema (`themeMode`) di `SettingPreferences.kt`, membuat paket `ui/theme` (`Color.kt`, `Type.kt`, `Theme.kt`) sesuai palet *Gallery Crisp* & *Field Pro Dark*, lalu menyusun layar demi layar (`SettingsScreen`, `StoreSearchScreen`, `StoreScreen`, serta dialog *Keypad*, *Zoom*, *Clear*, dan *Export XLSX*) dengan panduan langkah demi langkah yang ramah pemula.
-4. **Generator XLSX Lokal & Rilis:**
-   - Penulis file `.xlsx` murni Kotlin (`ZipOutputStream` + XML) dengan pewarnaan merah otomatis dan verifikasi buka di Google Sheets, uji offline di HP MD, serta build APK.
+### 9.1 Kronologi & Gejala Error
+1. **Seluruh file `.kt` sudah bebas error sintaks** (tidak ada garis merah di editor Kotlin).
+2. Saat aplikasi pertama kali dijalankan (*Run*) di HP fisik melalui USB, aplikasi langsung *force close* dengan *stack trace* Logcat:
+   ```text
+   FATAL EXCEPTION: main
+   Process: com.example.oeimdapp, PID: 3405
+   java.lang.RuntimeException: Cannot create an instance of class com.example.oeimdapp.viewmodel.MainViewModel
+       at androidx.lifecycle.ViewModelProvider$AndroidViewModelFactory.create(...)
+       ...
+       at com.example.oeimdapp.MainActivity.getViewModel(MainActivity.kt:34)
+   ```
+   **Penyebab:** `MainViewModel` langsung memanggil `AppDatabase.getDatabase(application)` saat diinisialisasi, tetapi *annotation processor* Room (`room-compiler`) belum aktif sehingga kelas turunan `AppDatabase_Impl` tidak ikut dibuat saat build.
+3. Ketika `kotlin("kapt")` ditambahkan ke `app/build.gradle.kts` untuk menjalankan `room-compiler`, **Gradle Sync gagal** dengan error berikut:
+   ```text
+   Build file 'D:\Project Android\OEIMDApp\app\build.gradle.kts' line: 1
+
+   An exception occurred applying plugin request [id: 'org.jetbrains.kotlin.kapt']
+   > Failed to apply plugin 'org.jetbrains.kotlin.kapt'.
+      > The 'org.jetbrains.kotlin.kapt' plugin is not compatible with built-in Kotlin support.
+        Solution:
+          - [Recommended] Migrate this project to built-in Kotlin (https://developer.android.com/r/tools/built-in-kotlin).
+          - Or set the Gradle property 'android.builtInKotlin=false' and 'android.newDsl=false' to temporarily bypass this issue.
+   ```
+
+### 9.2 Analisis Akar Masalah (Root Cause)
+- Proyek Android Studio pengguna memakai **Android Gradle Plugin (AGP) 9.0+** yang mengaktifkan **Built-in Kotlin** secara bawaan (`android.builtInKotlin=true`).
+- Pada AGP 9.0+ dengan *built-in Kotlin*, plugin lama **`org.jetbrains.kotlin.kapt` (`kotlin("kapt")`) ditolak oleh Gradle** karena tidak kompatibel dengan *built-in Kotlin*.
+- Akibatnya, `room-compiler` belum bisa memproses `@Database` pada `AppDatabase.kt`, sehingga `AppDatabase_Impl` belum ter-generate dan memicu crash saat `MainViewModel` diinstansiasi.
+
+### 9.3 Panduan Penyelesaian untuk AI Berikutnya
+Minta pengguna menunjukkan isi singkat dari `gradle/libs.versions.toml` dan `app/build.gradle.kts` (agar versi AGP, Kotlin, dan Room terlihat pasti), lalu terapkan salah satu solusi bersih berikut:
+1. **Opsi 1 (Direkomendasikan — Gunakan KSP / Kotlin Symbol Processing):**
+    - Hapus `kotlin("kapt")` dari `app/build.gradle.kts`.
+    - Pasang plugin KSP (`com.google.devtools.ksp`) sesuai versi Kotlin proyek di `libs.versions.toml` & `app/build.gradle.kts`.
+    - Ganti `kapt("androidx.room:room-compiler:...")` menjadi `ksp("androidx.room:room-compiler:...")` (pastikan versi Room mendukung versi Kotlin proyek, misal Room `2.7.0`+ jika memakai Kotlin `2.1+`).
+2. **Opsi 2 (Alternatif Bawaan AGP 9.0 — `com.android.legacy-kapt`):**
+    - Pada AGP 9.0+ dengan *built-in Kotlin*, Google menyediakan plugin `id("com.android.legacy-kapt")` sebagai pengganti langsung `kotlin("kapt")` tanpa perlu memigrasikan dependensi ke KSP.
+3. **Pastikan juga pengecekan awal `isConfigured` di `MainViewModel.kt`:**
+    - Pastikan `isConfigured` memeriksa `(webAppUrl.startsWith("http://") || webAppUrl.startsWith("https://")) && appToken.isNotBlank()` sehingga saat aplikasi baru diinstal (URL & Token kosong), aplikasi **langsung masuk ke `SettingsScreen`** tanpa memicu panggilan jaringan apa pun.
+
+---
+
+## 10. Rencana langkah berikut setelah error Gradle/Room selesai
+
+1. **Verifikasi Cold Start & Konfigurasi Awal:** Pastikan aplikasi terbuka mulus di HP langsung ke `SettingsScreen` saat URL & Token masih kosong.
+2. **Uji Integrasi End-to-End di HP:**
+    - Input Nama MD, URL Web App, dan Token ➔ uji tombol *Sinkronkan Data Sekarang*.
+    - Uji pergantian tema (`Ikuti Sistem` / `Terang` / `Gelap`), pencarian toko & area, pengisian stok per orientasi (`Vertical`/`Horizontal`), kartu `-000`, Zoom Lightbox, Numeric Keypad, dan Clear + Urungkan 5 detik.
+    - Uji **Export XLSX** (*Simpan Download* dan *Bagikan File*), lalu buka file `.xlsx` hasil generate di Google Sheets untuk memverifikasi tata letak tabel, 4 baris pemisah kosong, dan aksen warna merah.
+3. **Build APK Rilis:** Membuat file `.apk` siap pakai untuk tim Merchandiser (MD) di lapangan.
