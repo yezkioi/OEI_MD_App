@@ -1,6 +1,6 @@
-# OEI MD–WH App: Dokumen Serah Terima (Handoff 003.2)
+# OEI MD–WH App: Dokumen Serah Terima (Handoff 004) - Versi Alpha 0.1
 
-> Untuk AI di chat berikutnya: baca seluruh dokumen ini sebelum membalas. Ini rangkuman lengkap dari proyek **OEI MD App**. Semua keputusan di bagian **3, 4, 5, 6, dan 7 (Pedoman UI/UX Final)** **sudah dikunci dan disetujui pengguna — JANGAN diubah tanpa persetujuan eksplisit pengguna.**
+> Untuk AI di chat berikutnya: baca seluruh dokumen ini sebelum membalas. Ini rangkuman lengkap dari proyek **OEI MD App** (Versi Alpha 0.1 — Aplikasi Pertama Kali Berjalan Lancar di HP). Semua keputusan di bagian **3, 4, 5, 6, dan 7 (Pedoman UI/UX Final)** **sudah dikunci dan disetujui pengguna — JANGAN diubah tanpa persetujuan eksplisit pengguna.**
 
 ---
 
@@ -260,55 +260,33 @@ Sistem desain ini merupakan hasil perpaduan final yang telah diuji pada prototip
 
 ---
 
-## 9. Masalah Teknis Aktif (Prioritas Utama untuk Diselesaikan Terlebih Dahulu)
+## 9. Riwayat Penanganan Masalah Teknis (Selesai pada Versi Alpha 0.1 / Handoff 004)
 
-### 9.1 Kronologi & Gejala Error
-1. **Seluruh file `.kt` sudah bebas error sintaks** (tidak ada garis merah di editor Kotlin).
-2. Saat aplikasi pertama kali dijalankan (*Run*) di HP fisik melalui USB, aplikasi langsung *force close* dengan *stack trace* Logcat:
-   ```text
-   FATAL EXCEPTION: main
-   Process: com.example.oeimdapp, PID: 3405
-   java.lang.RuntimeException: Cannot create an instance of class com.example.oeimdapp.viewmodel.MainViewModel
-       at androidx.lifecycle.ViewModelProvider$AndroidViewModelFactory.create(...)
-       ...
-       at com.example.oeimdapp.MainActivity.getViewModel(MainActivity.kt:34)
-   ```
-   **Penyebab:** `MainViewModel` langsung memanggil `AppDatabase.getDatabase(application)` saat diinisialisasi, tetapi *annotation processor* Room (`room-compiler`) belum aktif sehingga kelas turunan `AppDatabase_Impl` tidak ikut dibuat saat build.
-3. Ketika `kotlin("kapt")` ditambahkan ke `app/build.gradle.kts` untuk menjalankan `room-compiler`, **Gradle Sync gagal** dengan error berikut:
-   ```text
-   Build file 'D:\Project Android\OEIMDApp\app\build.gradle.kts' line: 1
+Seluruh kendala kompilasi, crash runtime, dan kegagalan sync Gradle telah **berhasil diselesaikan 100%** hingga aplikasi pertama kali dapat di-run dan berjalan lancar di HP. Ringkasan penanganan:
 
-   An exception occurred applying plugin request [id: 'org.jetbrains.kotlin.kapt']
-   > Failed to apply plugin 'org.jetbrains.kotlin.kapt'.
-      > The 'org.jetbrains.kotlin.kapt' plugin is not compatible with built-in Kotlin support.
-        Solution:
-          - [Recommended] Migrate this project to built-in Kotlin (https://developer.android.com/r/tools/built-in-kotlin).
-          - Or set the Gradle property 'android.builtInKotlin=false' and 'android.newDsl=false' to temporarily bypass this issue.
-   ```
+### 9.1 Migrasi Stack Gradle ke Versi Stabil Industri
+- **Masalah:** Versi eksperimental AGP 9.5.1 menyebabkan *Built-in Kotlin* tidak mengkompilasi `MainActivity.kt` ke file `.dex` APK, memicu `ClassNotFoundException: Didn't find class "com.example.oeimdapp.MainActivity"`.
+- **Penanganan:** Mengubah stack Gradle di `gradle/libs.versions.toml`, `build.gradle.kts`, dan `app/build.gradle.kts` ke versi stabil standar industri yang teruji:
+  - **Android Gradle Plugin (AGP):** `8.7.3`
+  - **Kotlin:** `2.0.21`
+  - **KSP (Room Generator):** `2.0.21-1.0.28`
+  - **Plugin:** `com.android.application`, `org.jetbrains.kotlin.android`, `org.jetbrains.kotlin.plugin.compose`, `com.google.devtools.ksp`.
 
-### 9.2 Analisis Akar Masalah (Root Cause)
-- Proyek Android Studio pengguna memakai **Android Gradle Plugin (AGP) 9.0+** yang mengaktifkan **Built-in Kotlin** secara bawaan (`android.builtInKotlin=true`).
-- Pada AGP 9.0+ dengan *built-in Kotlin*, plugin lama **`org.jetbrains.kotlin.kapt` (`kotlin("kapt")`) ditolak oleh Gradle** karena tidak kompatibel dengan *built-in Kotlin*.
-- Akibatnya, `room-compiler` belum bisa memproses `@Database` pada `AppDatabase.kt`, sehingga `AppDatabase_Impl` belum ter-generate dan memicu crash saat `MainViewModel` diinstansiasi.
+### 9.2 Penyelarasan Target JVM (Java 11)
+- **Masalah:** Terjadi bentrok target JVM (`compileDebugJavaWithJavac` 11 vs `kspDebugKotlin` 22).
+- **Penanganan:** Menambahkan `kotlinOptions { jvmTarget = "11" }` pada `app/build.gradle.kts` agar kompilasi Java dan Kotlin/KSP berjalan selaras pada JVM 11.
 
-### 9.3 Panduan Penyelesaian untuk AI Berikutnya
-Minta pengguna menunjukkan isi singkat dari `gradle/libs.versions.toml` dan `app/build.gradle.kts` (agar versi AGP, Kotlin, dan Room terlihat pasti), lalu terapkan salah satu solusi bersih berikut:
-1. **Opsi 1 (Direkomendasikan — Gunakan KSP / Kotlin Symbol Processing):**
-    - Hapus `kotlin("kapt")` dari `app/build.gradle.kts`.
-    - Pasang plugin KSP (`com.google.devtools.ksp`) sesuai versi Kotlin proyek di `libs.versions.toml` & `app/build.gradle.kts`.
-    - Ganti `kapt("androidx.room:room-compiler:...")` menjadi `ksp("androidx.room:room-compiler:...")` (pastikan versi Room mendukung versi Kotlin proyek, misal Room `2.7.0`+ jika memakai Kotlin `2.1+`).
-2. **Opsi 2 (Alternatif Bawaan AGP 9.0 — `com.android.legacy-kapt`):**
-    - Pada AGP 9.0+ dengan *built-in Kotlin*, Google menyediakan plugin `id("com.android.legacy-kapt")` sebagai pengganti langsung `kotlin("kapt")` tanpa perlu memigrasikan dependensi ke KSP.
-3. **Pastikan juga pengecekan awal `isConfigured` di `MainViewModel.kt`:**
-    - Pastikan `isConfigured` memeriksa `(webAppUrl.startsWith("http://") || webAppUrl.startsWith("https://")) && appToken.isNotBlank()` sehingga saat aplikasi baru diinstal (URL & Token kosong), aplikasi **langsung masuk ke `SettingsScreen`** tanpa memicu panggilan jaringan apa pun.
+### 9.3 Perbaikan Safe Context Casting pada Theme
+- **Masalah:** `(view.context as Activity)` pada `Theme.kt` memicu `ClassCastException` saat `view.context` berupa `ContextThemeWrapper`.
+- **Penanganan:** Menambahkan helper `findActivity()` pada `Theme.kt` untuk melakukan *unwrapping* `ContextWrapper` secara aman tanpa crash.
 
 ---
 
-## 10. Rencana langkah berikut setelah error Gradle/Room selesai
+## 10. Rencana Langkah Pengujian Selanjutnya (Pengujian Versi Alpha 0.1)
 
 1. **Verifikasi Cold Start & Konfigurasi Awal:** Pastikan aplikasi terbuka mulus di HP langsung ke `SettingsScreen` saat URL & Token masih kosong.
 2. **Uji Integrasi End-to-End di HP:**
     - Input Nama MD, URL Web App, dan Token ➔ uji tombol *Sinkronkan Data Sekarang*.
     - Uji pergantian tema (`Ikuti Sistem` / `Terang` / `Gelap`), pencarian toko & area, pengisian stok per orientasi (`Vertical`/`Horizontal`), kartu `-000`, Zoom Lightbox, Numeric Keypad, dan Clear + Urungkan 5 detik.
     - Uji **Export XLSX** (*Simpan Download* dan *Bagikan File*), lalu buka file `.xlsx` hasil generate di Google Sheets untuk memverifikasi tata letak tabel, 4 baris pemisah kosong, dan aksen warna merah.
-3. **Build APK Rilis:** Membuat file `.apk` siap pakai untuk tim Merchandiser (MD) di lapangan.
+3. **Persiapan Rilis Beta:** Menyempurnakan hasil pengujian Alpha untuk siap didistribusikan ke tim Merchandiser (MD) di lapangan.
