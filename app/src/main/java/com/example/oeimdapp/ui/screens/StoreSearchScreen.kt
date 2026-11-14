@@ -123,7 +123,7 @@ fun StoreSearchScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Pilih Toko Mitra",
+                            text = "Old East Indies MD App",
                             style = MaterialTheme.typography.titleLarge,
                             color = colors.textPrimary
                         )

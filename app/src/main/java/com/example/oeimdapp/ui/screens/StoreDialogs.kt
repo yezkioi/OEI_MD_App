@@ -19,9 +19,11 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -52,6 +54,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -582,13 +585,16 @@ fun ClearConfirmDialog(
                 shape = RoundedCornerShape(20.dp),
                 color = colors.elevatedSurface,
                 border = BorderStroke(1.dp, colors.borderStrong),
-            shadowElevation = 8.dp
-        ) {
+                shadowElevation = 8.dp,
+                modifier = Modifier
+                    .fillMaxWidth(0.96f)
+                    .widthIn(min = 350.dp, max = 520.dp)
+            ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Text(
                     text = "Reset Hitungan Stok",
@@ -607,7 +613,7 @@ fun ClearConfirmDialog(
                     onClick = onClearCurrentList,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp),
+                        .heightIn(min = 52.dp),
                     shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(1.5.dp, colors.kurangBorder),
                     colors = ButtonDefaults.outlinedButtonColors(
@@ -618,7 +624,10 @@ fun ClearConfirmDialog(
                     Text(
                         text = "Clear list ini ($currentListName)",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
+                        fontSize = 13.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center
                     )
                 }
 
@@ -627,7 +636,7 @@ fun ClearConfirmDialog(
                     onClick = onClearAllStoreLists,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp),
+                        .heightIn(min = 52.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = colors.habisBorder,
@@ -637,7 +646,10 @@ fun ClearConfirmDialog(
                     Text(
                         text = "Clear semua list toko ini ($storeName)",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
+                        fontSize = 13.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center
                     )
                 }
 

@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -24,8 +26,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -39,13 +44,21 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import kotlinx.coroutines.launch
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -57,6 +70,7 @@ import androidx.compose.ui.unit.sp
 import com.example.oeimdapp.ui.theme.OeiTheme
 import com.example.oeimdapp.viewmodel.MainViewModel
 
+@androidx.compose.foundation.ExperimentalFoundationApi
 @Composable
 fun SettingsScreen(
     viewModel: MainViewModel,
@@ -71,10 +85,22 @@ fun SettingsScreen(
     var isTokenVisible by rememberSaveable { mutableStateOf(false) }
 
     val themeOptions = listOf(
-        "system" to "Ikuti Sistem",
-        "light" to "Terang",
-        "dark" to "Gelap"
+        Triple("system", "Sistem", Icons.Default.BrightnessAuto),
+        Triple("light", "Terang", Icons.Default.WbSunny),
+        Triple("dark", "Gelap", Icons.Default.DarkMode)
     )
+
+    val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+    LaunchedEffect(imeBottom) {
+        if (imeBottom > 0) {
+            scrollState.animateScrollTo(scrollState.maxValue)
+        }
+    }
+    val mdNameRequester = remember { BringIntoViewRequester() }
+    val urlRequester = remember { BringIntoViewRequester() }
+    val tokenRequester = remember { BringIntoViewRequester() }
 
     Column(
         modifier = Modifier
@@ -128,19 +154,19 @@ fun SettingsScreen(
         }
 
         // ==========================================
-        // KONTEN UTAMA (SCROLLABLE DENGAN IME PADDING)
+        // KONTEN UTAMA (SCROLLABLE DENGAN IME PADDING & AUTO-SCROLL)
         // ==========================================
         Column(
             modifier = Modifier
                 .weight(1f)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .imePadding()
                 .navigationBarsPadding()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // ------------------------------------------
-            // 1. TEMA TAMPILAN (3 TOMBOL INTUITIF)
+            // 1. TEMA TAMPILAN (3 TOMBOL INTUITIF DENGAN ANIMASI FLUID)
             // ------------------------------------------
             Surface(
                 shape = RoundedCornerShape(16.dp),
@@ -168,27 +194,40 @@ fun SettingsScreen(
                             .padding(4.dp),
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        themeOptions.forEach { (modeKey, label) ->
+                        themeOptions.forEach { (modeKey, label, iconVec) ->
                             val isSelected = viewModel.themeMode == modeKey
+                            val animatedBgColor by androidx.compose.animation.animateColorAsState(
+                                targetValue = if (isSelected) colors.primaryAction else colors.subtleSurface,
+                                animationSpec = androidx.compose.animation.core.tween(250),
+                                label = "themeBgAnim"
+                            )
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(9.dp))
-                                    .background(
-                                        if (isSelected) colors.primaryAction
-                                        else colors.subtleSurface
-                                    )
+                                    .background(animatedBgColor)
                                     .clickable { viewModel.updateThemeMode(modeKey) }
                                     .padding(vertical = 10.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = label,
-                                    fontSize = 13.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) colors.onPrimaryAction else colors.textSecondary,
-                                    textAlign = TextAlign.Center
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = iconVec,
+                                        contentDescription = null,
+                                        tint = if (isSelected) colors.onPrimaryAction else colors.textSecondary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = label,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) colors.onPrimaryAction else colors.textSecondary,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
                             }
                         }
                     }
@@ -218,7 +257,14 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = mdNameInput,
                         onValueChange = { mdNameInput = it },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .bringIntoViewRequester(mdNameRequester)
+                            .onFocusChanged { focusState ->
+                                if (focusState.isFocused) {
+                                    scope.launch { mdNameRequester.bringIntoView() }
+                                }
+                            },
                         label = { Text("Nama Merchandiser (MD)") },
                         placeholder = { Text("Contoh: Budi") },
                         singleLine = true,
@@ -275,7 +321,14 @@ fun SettingsScreen(
                             urlInput = it
                             viewModel.clearSyncFeedback()
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .bringIntoViewRequester(urlRequester)
+                            .onFocusChanged { focusState ->
+                                if (focusState.isFocused) {
+                                    scope.launch { urlRequester.bringIntoView() }
+                                }
+                            },
                         label = { Text("URL Web App (Link Script)") },
                         placeholder = { Text("https://script.google.com/macros/s/.../exec") },
                         singleLine = true,
@@ -299,7 +352,14 @@ fun SettingsScreen(
                             tokenInput = it
                             viewModel.clearSyncFeedback()
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .bringIntoViewRequester(tokenRequester)
+                            .onFocusChanged { focusState ->
+                                if (focusState.isFocused) {
+                                    scope.launch { tokenRequester.bringIntoView() }
+                                }
+                            },
                         label = { Text("Token Akses") },
                         placeholder = { Text("Masukkan token dari Script Properties") },
                         singleLine = true,

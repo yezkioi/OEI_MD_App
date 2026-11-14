@@ -164,10 +164,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     syncError = "Server menolak permintaan. Periksa kembali Token Akses."
                 } else {
                     // Deteksi perubahan hash list dari WH
-                    val hasListChanged = oldLists.isNotEmpty() && response.lists.any { (id, newList) ->
-                        val oldList = oldLists[id]
-                        oldList != null && oldList.hash != newList.hash
-                    }
+                    val hasListChanged = oldLists.isEmpty() || oldLists.any { (id, oldList) ->
+                        val newList = response.lists[id]
+                        newList == null || oldList.hash != newList.hash
+                    } || response.lists.any { (id, _) -> oldLists[id] == null }
+
                     if (hasListChanged) {
                         listUpdatedBanner = "List diperbarui oleh WH"
                     }
@@ -179,7 +180,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     lastSyncTime = nowText
                     prefs.lastSyncTime = nowText
 
-                    syncSuccessMessage = "Sinkronisasi berhasil (${getActiveStores().size} toko aktif)"
+                    syncSuccessMessage = if (hasListChanged) {
+                        "Sinkronisasi berhasil — List diperbarui oleh WH (${getActiveStores().size} toko)"
+                    } else {
+                        "Sinkronisasi berhasil (${getActiveStores().size} toko aktif)"
+                    }
                     onSuccess?.invoke()
                 }
             } catch (e: Exception) {

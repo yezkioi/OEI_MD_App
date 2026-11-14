@@ -21,6 +21,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -32,8 +36,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.HorizontalSplit
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VerticalSplit
+import androidx.compose.ui.zIndex
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,6 +59,24 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import coil.compose.AsyncImage
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -100,6 +125,16 @@ fun StoreScreen(
 
     val storeLists = viewModel.getListsForStore(store)
     val currentList = storeLists.find { it.id == viewModel.selectedListId } ?: storeLists.firstOrNull()
+
+    val pillListState = rememberLazyListState()
+    LaunchedEffect(currentList?.id) {
+        currentList?.let { list ->
+            val index = storeLists.indexOfFirst { it.id == list.id }
+            if (index >= 0) {
+                pillListState.animateScrollToItem(index)
+            }
+        }
+    }
 
     // State untuk berbagai modal dialog di layar toko
     var zoomItem by remember { mutableStateOf<ItemDto?>(null) }
@@ -219,6 +254,7 @@ fun StoreScreen(
                     // ==========================================
                     if (storeLists.isNotEmpty()) {
                         LazyRow(
+                            state = pillListState,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(bottom = 10.dp),
@@ -278,138 +314,161 @@ fun StoreScreen(
                 }
             }
 
-            // ==========================================
-            // 3. TAB ORIENTASI (DENGAN ANIMASI GESER FLUID)
-            // ==========================================
-            if (currentList != null && currentList.pisahOrientasi) {
-                val orientations = listOf("Vertical", "Horizontal")
-                val isHorizontalSelected = viewModel.selectedOrientation.equals("Horizontal", ignoreCase = true)
-                val targetBias by androidx.compose.animation.core.animateFloatAsState(
-                    targetValue = if (isHorizontalSelected) 1f else -1f,
-                    animationSpec = androidx.compose.animation.core.tween(durationMillis = 250),
-                    label = "orientationTabAnimation"
-                )
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(colors.elevatedSurface)
-                        .border(1.dp, colors.border, RoundedCornerShape(12.dp))
-                        .padding(4.dp)
-                ) {
-                    // Kapsul Penanda Aktif dengan Animasi Geser Smooth
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(0.5f)
-                            .align(androidx.compose.ui.BiasAlignment(horizontalBias = targetBias, verticalBias = 0f))
-                            .clip(RoundedCornerShape(9.dp))
-                            .background(colors.primaryAction)
-                            .height(34.dp)
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        orientations.forEach { orientation ->
-                            val isTabSelected = viewModel.selectedOrientation.equals(orientation, ignoreCase = true)
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(9.dp))
-                                    .clickable { viewModel.selectOrientation(orientation) }
-                                    .padding(vertical = 8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = orientation,
-                                    fontSize = 13.sp,
-                                    fontWeight = if (isTabSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isTabSelected) colors.onPrimaryAction else colors.textSecondary
-                                )
-                            }
-                        }
-                    }
-                }
-            } else {
-                Spacer(modifier = Modifier.height(10.dp))
-            }
+            Spacer(modifier = Modifier.height(10.dp))
 
             // ==========================================
-            // 4. GRID 3 KOLOM KARTU PRODUK (OPTIMIZED)
+            // 4. GRID 3 KOLOM KARTU PRODUK (DENGAN DIRECTIONAL ANIMATED CONTENT & SWIPE)
             // ==========================================
             if (currentList != null) {
-                val visibleItems = remember(currentList, viewModel.selectedOrientation) {
-                    if (currentList.pisahOrientasi) {
-                        currentList.items.filter {
-                            it.orientasi.equals(viewModel.selectedOrientation, ignoreCase = true)
+                val navigableSteps = remember(storeLists) {
+                    val steps = mutableListOf<Pair<String, String>>()
+                    for (list in storeLists) {
+                        if (list.pisahOrientasi) {
+                            steps.add(list.id to "Vertical")
+                            steps.add(list.id to "Horizontal")
+                        } else {
+                            steps.add(list.id to "Vertical")
                         }
-                    } else {
-                        currentList.items
                     }
+                    steps
                 }
 
-                val zeroItemKey = remember(currentList.id, currentList.pisahOrientasi, viewModel.selectedOrientation) {
-                    if (currentList.pisahOrientasi) {
-                        if (viewModel.selectedOrientation.equals("Horizontal", ignoreCase = true)) "000-H"
-                        else "000-V"
-                    } else {
-                        "000"
-                    }
+                val currentListId = currentList.id
+                val currentOrient = viewModel.selectedOrientation
+                val currentIndex = remember(currentListId, currentOrient, navigableSteps) {
+                    navigableSteps.indexOfFirst { it.first == currentListId && it.second.equals(currentOrient, ignoreCase = true) }.coerceAtLeast(0)
                 }
-                val zeroItemLabel = "${currentList.jenisAlias}-000"
-                val zeroItemCount = viewModel.getCount(currentList.id, zeroItemKey)
+                var previousIndex by remember { mutableStateOf(currentIndex) }
+                val isMovingForward = currentIndex >= previousIndex
+                LaunchedEffect(currentIndex) {
+                    previousIndex = currentIndex
+                }
 
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = 10.dp,
-                        end = 10.dp,
-                        top = 2.dp,
-                        bottom = 96.dp
-                    ),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(
-                        items = visibleItems,
-                        key = { "${currentList.id}_${it.kode}" },
-                        contentType = { "product_stock_card" }
-                    ) { item ->
-                        val count = viewModel.getCount(currentList.id, item.kode)
-                        ProductStockCard(
-                            item = item,
-                            pisahOrientasi = currentList.pisahOrientasi,
-                            count = count,
-                            onIncrement = { viewModel.updateItemCount(currentList.id, item.kode, count + 1) },
-                            onDecrement = { viewModel.updateItemCount(currentList.id, item.kode, count - 1) },
-                            onOpenKeypad = { keypadTargetItem = item },
-                            onOpenZoom = { zoomItem = item }
+                var dragTotal by remember { mutableStateOf(0f) }
+                val swipeModifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(navigableSteps, currentList.id, viewModel.selectedOrientation) {
+                        detectHorizontalDragGestures(
+                            onDragStart = { dragTotal = 0f },
+                            onHorizontalDrag = { _, change ->
+                                dragTotal += change
+                            },
+                            onDragEnd = {
+                                val threshold = 45f
+                                if (dragTotal > threshold) {
+                                    // Swipe Right (Left-to-Right gesture) -> Previous step
+                                    if (currentIndex > 0) {
+                                        val prev = navigableSteps[currentIndex - 1]
+                                        viewModel.selectList(prev.first)
+                                        val targetList = storeLists.find { it.id == prev.first }
+                                        if (targetList != null && targetList.pisahOrientasi) {
+                                            viewModel.selectOrientation(prev.second)
+                                        }
+                                    }
+                                } else if (dragTotal < -threshold) {
+                                    // Swipe Left (Right-to-Left gesture) -> Next step
+                                    if (currentIndex >= 0 && currentIndex < navigableSteps.size - 1) {
+                                        val next = navigableSteps[currentIndex + 1]
+                                        viewModel.selectList(next.first)
+                                        val targetList = storeLists.find { it.id == next.first }
+                                        if (targetList != null && targetList.pisahOrientasi) {
+                                            viewModel.selectOrientation(next.second)
+                                        }
+                                    }
+                                }
+                                dragTotal = 0f
+                            }
                         )
                     }
 
-                    // Kartu Khusus ALIAS-000 di posisi paling akhir grid
-                    item(
-                        key = "${currentList.id}_$zeroItemKey",
-                        contentType = "extra_zero_card"
+                AnimatedContent(
+                    targetState = currentList.id to viewModel.selectedOrientation,
+                    transitionSpec = {
+                        val forward = isMovingForward
+                        val slideOffset = 300
+                        if (forward) {
+                            (slideInHorizontally(animationSpec = tween(220)) { slideOffset } + fadeIn(tween(220)))
+                                .togetherWith(slideOutHorizontally(animationSpec = tween(180)) { -slideOffset } + fadeOut(tween(180)))
+                        } else {
+                            (slideInHorizontally(animationSpec = tween(220)) { -slideOffset } + fadeIn(tween(220)))
+                                .togetherWith(slideOutHorizontally(animationSpec = tween(180)) { slideOffset } + fadeOut(tween(180)))
+                        }
+                    },
+                    label = "listOrientationTransition",
+                    modifier = swipeModifier
+                ) { (activeListId, activeOrientation) ->
+                    val activeList = storeLists.find { it.id == activeListId } ?: currentList
+                    val visibleItems = remember(activeList, activeOrientation) {
+                        if (activeList.pisahOrientasi) {
+                            activeList.items.filter {
+                                it.orientasi.equals(activeOrientation, ignoreCase = true)
+                            }
+                        } else {
+                            activeList.items
+                        }
+                    }
+
+                    val zeroItemKey = remember(activeList.id, activeList.pisahOrientasi, activeOrientation) {
+                        if (activeList.pisahOrientasi) {
+                            if (activeOrientation.equals("Horizontal", ignoreCase = true)) "000-H"
+                            else "000-V"
+                        } else {
+                            "000"
+                        }
+                    }
+                    val zeroItemLabel = "${activeList.jenisAlias}-000"
+                    val zeroItemCount = viewModel.getCount(activeList.id, zeroItemKey)
+
+                    val gridTopPadding = if (activeList.pisahOrientasi) 64.dp else 8.dp
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = 10.dp,
+                            end = 10.dp,
+                            top = gridTopPadding,
+                            bottom = 96.dp
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        ExtraZeroStockCard(
-                            label = zeroItemLabel,
-                            count = zeroItemCount,
-                            onIncrement = { viewModel.updateItemCount(currentList.id, zeroItemKey, zeroItemCount + 1) },
-                            onDecrement = { viewModel.updateItemCount(currentList.id, zeroItemKey, zeroItemCount - 1) },
-                            onOpenKeypad = { isZeroCardKeypadOpen = true }
-                        )
+                        items(
+                            items = visibleItems,
+                            key = { "${activeList.id}_${it.kode}" },
+                            contentType = { "product_stock_card" }
+                        ) { item ->
+                            val count = viewModel.getCount(activeList.id, item.kode)
+                            ProductStockCard(
+                                item = item,
+                                pisahOrientasi = activeList.pisahOrientasi,
+                                count = count,
+                                onIncrement = { viewModel.updateItemCount(activeList.id, item.kode, count + 1) },
+                                onDecrement = { viewModel.updateItemCount(activeList.id, item.kode, count - 1) },
+                                onOpenKeypad = { keypadTargetItem = item },
+                                onOpenZoom = { zoomItem = item }
+                            )
+                        }
+
+                        // Kartu Khusus ALIAS-000 di posisi paling akhir grid
+                        item(
+                            key = "${activeList.id}_$zeroItemKey",
+                            contentType = "extra_zero_card"
+                        ) {
+                            ExtraZeroStockCard(
+                                label = zeroItemLabel,
+                                count = zeroItemCount,
+                                onIncrement = { viewModel.updateItemCount(activeList.id, zeroItemKey, zeroItemCount + 1) },
+                                onDecrement = { viewModel.updateItemCount(activeList.id, zeroItemKey, zeroItemCount - 1) },
+                                onOpenKeypad = { isZeroCardKeypadOpen = true }
+                            )
+                        }
                     }
                 }
             }
         }
 
         // ==========================================
-        // 5. SNACKBAR URUNGKAN (DI ATAS FLOATING DOCK)
+        // 5. SNACKBAR URUNGKAN (DI ATAS FLOATING DOCK DENGAN COUNTDOWN LINE)
         // ==========================================
         SnackbarHost(
             hostState = snackbarHostState,
@@ -417,7 +476,53 @@ fun StoreScreen(
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
                 .padding(bottom = 76.dp, start = 12.dp, end = 12.dp)
-        )
+        ) { data ->
+            val progress = remember { Animatable(1f) }
+            LaunchedEffect(Unit) {
+                progress.animateTo(0f, animationSpec = tween(5000, easing = LinearEasing))
+            }
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = colors.elevatedSurface,
+                border = BorderStroke(1.dp, colors.borderStrong),
+                shadowElevation = 6.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = data.visuals.message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.textPrimary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        data.visuals.actionLabel?.let { action ->
+                            TextButton(onClick = { data.performAction() }) {
+                                Text(
+                                    text = action,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.primaryAction
+                                )
+                            }
+                        }
+                    }
+                    LinearProgressIndicator(
+                        progress = { progress.value },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(3.dp),
+                        color = colors.primaryAction,
+                        trackColor = colors.subtleSurface
+                    )
+                }
+            }
+        }
 
         // ==========================================
         // 6. WARM CRAFT FLOATING PILL DOCK (CLEAR & EXPORT XLSX)
@@ -508,6 +613,92 @@ fun StoreScreen(
                     }
                 }
             }
+        }
+
+        // ==========================================
+        // FLOATING ORIENTATION BAR (ROUNDED SEPERTI CLEAR/EXPORT DENGAN GIMMICK ICON)
+        // ==========================================
+        AnimatedVisibility(
+            visible = currentList != null && currentList.pisahOrientasi,
+            enter = fadeIn(tween(250)) + expandVertically(expandFrom = Alignment.Top),
+            exit = fadeOut(tween(200)) + shrinkVertically(shrinkTowards = Alignment.Top),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 125.dp, start = 16.dp, end = 16.dp)
+                .zIndex(10f)
+        ) {
+            if (currentList != null && currentList.pisahOrientasi) {
+                val orientations = listOf(
+                    "Vertical" to Icons.Default.VerticalSplit,
+                    "Horizontal" to Icons.Default.HorizontalSplit
+                )
+                val isHorizontalSelected = viewModel.selectedOrientation.equals("Horizontal", ignoreCase = true)
+                val targetBias by androidx.compose.animation.core.animateFloatAsState(
+                    targetValue = if (isHorizontalSelected) 1f else -1f,
+                    animationSpec = tween(250),
+                    label = "floatingOrientationAnimation"
+                )
+
+                Surface(
+                    shape = CircleShape,
+                    color = colors.elevatedSurface,
+                    border = BorderStroke(1.dp, colors.borderStrong),
+                    shadowElevation = 8.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.5f)
+                                .align(androidx.compose.ui.BiasAlignment(horizontalBias = targetBias, verticalBias = 0f))
+                                .clip(CircleShape)
+                                .background(colors.primaryAction)
+                                .height(40.dp)
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            orientations.forEach { (orientation, iconVec) ->
+                                val isTabSelected = viewModel.selectedOrientation.equals(orientation, ignoreCase = true)
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(CircleShape)
+                                        .clickable { viewModel.selectOrientation(orientation) }
+                                        .padding(vertical = 10.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = iconVec,
+                                            contentDescription = null,
+                                            tint = if (isTabSelected) colors.onPrimaryAction else colors.textSecondary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = orientation,
+                                            fontSize = 13.sp,
+                                            fontWeight = if (isTabSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isTabSelected) colors.onPrimaryAction else colors.textSecondary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
     // ==========================================
     // RENDER MODAL DIALOGS
@@ -585,7 +776,6 @@ fun StoreScreen(
     }
 }
 }
-}
 
 // ==========================================
 // KOMPONEN PILL TOMBOL LIST DI ATAS
@@ -599,7 +789,16 @@ private fun ListPillButton(
     onClick: () -> Unit
 ) {
     val colors = OeiTheme.colors
-    val bgColor = if (isSelected) colors.primaryAction else colors.subtleSurfaceAlt
+    val animatedBg by animateColorAsState(
+        targetValue = if (isSelected) colors.primaryAction else colors.subtleSurfaceAlt,
+        animationSpec = tween(300),
+        label = "pillBg"
+    )
+    val animatedBorder by animateColorAsState(
+        targetValue = if (isSelected) colors.primaryAction else colors.borderStrong,
+        animationSpec = tween(300),
+        label = "pillBorder"
+    )
     val contentColor = if (isSelected) colors.onPrimaryAction else colors.textPrimary
     val badgeBg = if (isSelected) colors.onPrimaryAction.copy(alpha = 0.2f) else colors.elevatedSurface
     val badgeTextColor = if (isSelected) colors.onPrimaryAction else colors.textSecondary
@@ -607,10 +806,10 @@ private fun ListPillButton(
     Row(
         modifier = Modifier
             .clip(CircleShape)
-            .background(bgColor)
+            .background(animatedBg)
             .border(
                 width = 1.dp,
-                color = if (isSelected) colors.primaryAction else colors.borderStrong,
+                color = animatedBorder,
                 shape = CircleShape
             )
             .clickable(onClick = onClick)
@@ -751,7 +950,7 @@ private fun ProductStockCard(
                         )
                     }
                 } else {
-                    SubcomposeAsyncImage(
+                    AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
                             .data(imageUrl)
                             .crossfade(true)
@@ -761,23 +960,9 @@ private fun ProductStockCard(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(4.dp),
-                        loading = {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = colors.textSecondary
-                                )
-                            }
-                        },
-                        error = {
-                            LaunchedEffect(useFallbackUrl) {
-                                if (!useFallbackUrl) {
-                                    useFallbackUrl = true
-                                }
+                        onError = {
+                            if (!useFallbackUrl) {
+                                useFallbackUrl = true
                             }
                         }
                     )
