@@ -36,6 +36,7 @@ private enum class AppScreen {
     STORE_DETAIL
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
