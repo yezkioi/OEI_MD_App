@@ -1,6 +1,6 @@
-# OEI MD–WH App: Dokumen Serah Terima (Handoff 004.2 — Lean Edition)
+# OEI MD–WH App: Dokumen Serah Terima (Handoff 005.0 — V0.2-Alpha Stable Edition)
 
-> **Instruksi untuk AI Agent:** Baca dokumen ini sebelum memodifikasi kode di `D:\Project Android\OEIMDApp`. Seluruh keputusan pada **Bagian 2, 3, 4, dan 5** sudah dikunci dan disetujui pengguna — **JANGAN diubah tanpa persetujuan eksplisit.** Fokus pekerjaan saat ini adalah **revisi ulang 10 poin Quality of Life (QoL) pada Bagian 7**.
+> **Instruksi untuk AI Agent:** Baca dokumen ini sebelum memodifikasi kode di `D:\Project Android/OEIMDApp`. Seluruh keputusan pada **Bagian 2, 3, 4, dan 5** sudah dikunci dan disetujui pengguna — **JANGAN diubah tanpa persetujuan eksplisit.** Sembilan belas poin peningkatan Quality of Life (QoL), performa, dan penyempurnaan UI/UX telah **SELESAI dan TERUJI** pada rilis **V0.2-Alpha**.
 
 ## 1. Visi, Masalah & Prinsip Inti
 
@@ -19,7 +19,7 @@
 | Build & Bahasa | AGP `8.7.3`, Kotlin `2.0.21`, KSP `2.0.21-1.0.28`, JVM Target `11` |
 | UI & Arsitektur | Jetpack Compose (Material 3), MVVM (`ViewModel` + Compose State) |
 | Backend | Google Sheets + Google Apps Script Web App (**GET, read-only**) |
-| Gambar | Google Drive publik via **Coil** (`coil-compose`) dengan *disk cache* |
+| Gambar | Google Drive publik via **Coil** (`coil-compose` dengan `AsyncImage` tanpa subcomposition jank) |
 | Database Lokal | **Room** (`item_counts`) + `SharedPreferences` (cache JSON `sync` terakhir) |
 | Jaringan | Retrofit + OkHttp + Gson (`@Url` dinamis) |
 | Export Laporan | Penulis `.xlsx` murni Kotlin (`ZipOutputStream` + OpenXML di `XlsxExporter.kt`) |
@@ -31,17 +31,17 @@
 `Cold Start Check → (Jika URL/Token kosong: SettingsScreen) → StoreSearchScreen → StoreScreen (pills list & grid) → Export XLSX / Clear`
 
 1. **Validasi Cold Start:** Saat aplikasi dibuka, cek `webAppUrl` (harus berawalan `http://` atau `https://`) dan `appToken` di `SettingPreferences`. Jika kosong, **langsung buka `SettingsScreen`** dan **jangan panggil endpoint internet**.
-2. **Pencarian Toko (`StoreSearchScreen`):** *Real-time*, *case-insensitive*, mencocokkan `nama_toko` dan `area_cakupan`. Saat kolom kosong, tampilkan pintasan **"Toko Terakhir Dibuka"**. Urutan abjad *natural* (`Toko 2` sebelum `Toko 10`). Toko tanpa list aktif disembunyikan.
+2. **Pencarian Toko (`StoreSearchScreen`):** *Real-time*, *case-insensitive*, mencocokkan `nama_toko` dan `area_cakupan`. Saat kolom kosong, tampilkan pintasan **"Toko Terakhir Dibuka"**. Urutan abjad *natural* (`Toko 2` sebelum `Toko 10`). Toko tanpa list aktif disembunyikan. Didukung gestur *Pull-to-Refresh*.
 3. **Halaman Toko (`StoreScreen`):**
-    * Baris *pills* list di bagian atas (urut `jenis_urutan` terkecil, default **MP** langsung terbuka), menampilkan nama list + progres `terisi/total` (item reguler dengan `count > 0`). Pindah list tidak menghapus angka yang sudah diisi.
-    * **Tab Vertical / Horizontal** hanya muncul jika `pisah_orientasi == true` (MP & SMP). Jenis lain tampil dalam satu grid campur.
-    * **Grid 3 Kolom:** Gambar di atas, label `ALIAS-KODE` (`MP-012`), target (`T:X`), badge status (`Habis` / `Kurang X` / `Penuh ✓`), dan tombol stepper **`− [angka] +`** selebar penuh kartu di bawah. Ketuk gambar membuka *Zoom Lightbox*; ketuk angka membuka *Modal Numeric Keypad* (maksimal 4 digit `0–9999`, *auto-replace* nilai awal, tombol pintas *"Isi Sesuai Target"*).
+    * Baris *pills* list di bagian atas (urut `jenis_urutan` terkecil, default **MP** langsung terbuka), menampilkan nama list + progres `terisi/total` (item reguler dengan `count > 0`). Pindah list tidak menghapus angka yang sudah diisi, serta otomatis melakukan *side-scroll* (*auto-scroll pill aktif*).
+    * **Tab Vertical / Horizontal** (Floating Orientation Bar melayang dengan bentuk `CircleShape` penuh & ikon gimmick `VerticalSplit`/`HorizontalSplit`) hanya muncul jika `pisah_orientasi == true` (MP & SMP). Jenis lain tampil dalam satu grid campur. Grid list otomatis memiliki ruang kosong (*top padding*) agar card teratas tidak tertutup.
+    * **Grid 3 Kolom:** Gambar di atas (`AsyncImage` optimized anti-lag), label `ALIAS-KODE` (`MP-012`), target (`T:X`), badge status (`Habis` / `Kurang X` / `Penuh ✓`), dan tombol stepper **`− [angka] +`** selebar penuh kartu di bawah. Ketuk gambar membuka *Zoom Lightbox*; ketuk angka membuka *Modal Numeric Keypad* (maksimal 4 digit `0–9999`, *auto-replace* nilai awal, tombol pintas *"Isi Sesuai Target"*).
     * **Status Kartu:** `0` = Merah (`Habis`), `0 < x < target` = Kuning (`Kurang X`), `x >= target` = Hijau (`Penuh ✓`). Semua item mulai dari `0`.
     * **Urutan Item:** Ikuti field `urut` dari server (jangan diurutkan ulang).
 4. **Kartu Khusus `ALIAS-000` (Produk di Luar List):**
     * Dibuat otomatis oleh aplikasi di akhir grid dengan placeholder kotak abu-abu bertitik *"Di luar list"*, badge *"Tanpa Target"*, tanpa warna merah/kuning/hijau.
     * List `pisah_orientasi` (MP/SMP) memiliki kartu terpisah di tab Vertical (`000-V`) dan Horizontal (`000-H`), lalu dijumlahkan saat export.
-5. **Clear & Undo:** Dua opsi (*"Clear list ini"* dan *"Clear semua list toko ini"*) dengan konfirmasi + *Snackbar* **Urungkan** selama 5 detik.
+5. **Clear & Undo:** Dua opsi (*"Clear list ini"* dan *"Clear semua list toko ini"*) dengan modal konfirmasi ukuran dinamis (mendukung nama panjang) + *Snackbar* **Urungkan** selama 5 detik dengan garis indikator waktu mundur (*countdown progress line*).
 6. **Persistensi & Deteksi Perubahan WH:** Disimpan di Room per `storeId + listId + kode`. Jika `hash` list dari server berubah saat sinkronisasi, perbarui struktur list dan tampilkan info *"List diperbarui oleh WH"* sambil mempertahankan angka hitungan MD per kode.
 
 ### 3.2 Aturan Export `.xlsx` (Lokal)
@@ -84,7 +84,7 @@
 
 ## 5. Sistem Desain & Palet Warna (Dikunci)
 
-* **Aturan Dasar:** Bingkai foto produk di Light Mode wajib `#FFFFFF` (akurasi warna karya seni). Wajib `fontFeatureSettings = "tnum"` (angka tabular) pada kode item, stepper, progres `terisi/total`, dan numeric keypad. Badge `★ Best` universal: bg `#020617` (`0.85f`), teks `#FCD34D`.
+* **Aturan Dasar:** Bingkai foto produk di Light Mode wajib `#FFFFFF` (akurasi warna karya seni). Wajib `fontFeatureSettings = "tnum"` (angka tabular) pada kode item, stepper, progres `terisi/total`, dan numeric keypad. Badge `★ Best` universal: bg `#020617` (`0.85f`), teks `#FCD34D`. Penguncian skala font (`fontScale = 1.0f`) di tingkat aplikasi untuk memastikan ketahanan terhadap preferensi skala font perangkat.
 
 | Token / Status | Mode Terang (`Gallery Crisp`) | Mode Gelap (`Field Pro Dark`) |
 |---|---|---|
@@ -95,47 +95,43 @@
 
 ## 6. Peta Kode Proyek (`app/src/main/java/com/example/oeimdapp/`)
 
-* `MainActivity.kt` — Navigasi layar, cold start check `isConfigured`, `BackHandler`.
+* `MainActivity.kt` — Navigasi layar, cold start check `isConfigured`, `BackHandler`, penguncian font scale `1.0f`.
 * `viewmodel/MainViewModel.kt` — State aplikasi, tema, offline JSON cache, deteksi perubahan `hash`, natural sort, Clear + Undo 5 detik.
 * `data/model/ApiResponse.kt` — DTO respons JSON `sync`.
 * `data/remote/ApiService.kt` & `RetrofitClient.kt` — Endpoint dinamis `@Url`, OkHttp timeout, `cleanWebAppUrl()`.
 * `data/local/ItemCountEntity.kt`, `ItemCountDao.kt`, `AppDatabase.kt` — Database Room `oei_md_database`.
 * `data/repository/OeiRepository.kt` — Repository jaringan & Room.
 * `data/prefs/SettingPreferences.kt` — `SharedPreferences` pengaturan, cache JSON, dan counter laporan.
-* `ui/theme/Color.kt`, `Type.kt`, `Theme.kt` — Sistem tema *Gallery Crisp* & *Field Pro Dark* (dengan `findActivity()`).
-* `ui/screens/SettingsScreen.kt` — Layar Pengaturan.
-* `ui/screens/StoreSearchScreen.kt` — Layar Pencarian Toko.
-* `ui/screens/StoreScreen.kt` — Layar Utama Toko, grid 3 kolom, kartu `-000`, *Floating Pill Dock*.
-* `ui/screens/StoreDialogs.kt` — Modal Numeric Keypad, Zoom Lightbox, Clear Dialog.
+* `ui/theme/Color.kt`, `Type.kt`, `Theme.kt` — Sistem tema *Gallery Crisp* & *Field Pro Dark* (dengan `findActivity()` dan `LocalDensity` fontScale lock).
+* `ui/screens/SettingsScreen.kt` — Layar Pengaturan dengan tema berikon gimmick dan auto-scroll presisi (*BringIntoViewRequester*).
+* `ui/screens/StoreSearchScreen.kt` — Layar Pencarian Toko dengan *Pull-to-Refresh*.
+* `ui/screens/StoreScreen.kt` — Layar Utama Toko, grid 3 kolom anti-lag (`AsyncImage`), kartu `-000`, floating orientation bar melayang berikon gimmick, auto-scroll pill list, & countdown undo bar.
+* `ui/screens/StoreDialogs.kt` — Modal Numeric Keypad, Zoom Lightbox, Clear Dialog (ukuran dinamis untuk teks panjang).
 * `ui/screens/ExportDialog.kt` & `export/XlsxExporter.kt` — Dialog verifikasi export & generator `.xlsx`.
 
-## 7. Daftar 10 Perbaikan QoL (STATUS: BELUM MEMUASKAN — PERLU DIKERJAKAN ULANG)
+## 7. Status 10+ Poin Peningkatan QoL & Performa (STATUS: SELESAI & TERUJI — V0.2-ALPHA)
 
-> **Catatan Konteks:** Ke-10 poin berikut pernah dicoba diimplementasikan pada iterasi sebelumnya, namun **hasilnya belum memuaskan secara visual maupun performa**. Periksa implementasi saat ini di file target terkait, diskusikan pendekatan yang lebih solid bersama pengguna jika perlu, dan terapkan perbaikannya secara bertahap:
+> **Catatan:** Seluruh 10 poin perbaikan QoL awal serta penyempurnaan tambahan berikut telah **SELESAI diimplementasikan, diuji, dan digabungkan ke branch `main` pada rilis V0.2-Alpha**:
 
-1. **Rasio Kartu Produk Seragam `1:1` (`StoreScreen.kt`):**
-    * *Target:* Seluruh kartu produk (baik Vertical, Horizontal, maupun non-orientasi) menggunakan rasio bingkai gambar **`1:1` (`aspectRatio(1f)`)** agar seragam karena aset gambar distandarisasi `1:1`.
-2. **Soft Keyboard Mendorong Layar Pengaturan (`SettingsScreen.kt` / `AndroidManifest.xml`):**
-    * *Target:* Saat kolom input di `SettingsScreen` diketuk, keyboard sistem harus mendorong tampilan ke atas secara mulus (dan otomatis scroll ke field yang aktif) sehingga kolom input tidak tertutup keyboard.
-3. **Kontras Teks Banner Error di Mode Terang (`SettingsScreen.kt` / `StoreSearchScreen.kt` / `Color.kt`):**
-    * *Target:* Banner galat (misalnya *"Tidak ada internet"*) pada tema Terang wajib menggunakan warna teks gelap kontras tinggi, bukan teks putih yang menyatu dengan latar terang.
-4. **Gestur Pull-to-Refresh (`StoreSearchScreen.kt`):**
-    * *Target:* Layar pencarian toko mendukung gestur tarik ke bawah (*Pull-to-Refresh*) yang responsif untuk menjalankan `viewModel.syncNow(forceRefresh = true)`.
-5. **Kontras Latar Placeholder Kartu `-000` di Mode Terang (`Color.kt` / `StoreScreen.kt`):**
-    * *Target:* Warna latar area gambar pada kartu *"Di luar list"* (`ALIAS-000`) saat Light Mode harus cukup kontras terhadap background aplikasi (`#F4F6F9`) agar bentuk kartunya terlihat jelas.
-6. **Dashed Border Penuh di Keempat Sisi Kartu `-000` (`StoreScreen.kt`):**
-    * *Target:* Garis putus-putus (*dashed border*) pada kartu `-000` harus mengelilingi seluruh **4 sisi luar kartu** secara utuh (sebelumnya hanya tampak garis putus-putus di bagian tengah pemisah gambar dan stepper).
-7. **Optimasi Performa `LazyVerticalGrid` Anti-Lag (`StoreScreen.kt` / `MainViewModel.kt`):**
-    * *Target:* Menghilangkan *lag* / *stutter* saat *scroll* grid produk (meski ukuran gambar kecil ~15KB). Evaluasi penyebab rekomposisi berlebih, pembacaan state map hitungan per kartu, ukuran target rendering Coil, serta stabilitas parameter Composable.
-8. **Transisi Halus Antar-Tab & Antar-Layar (`MainActivity.kt` / `StoreScreen.kt`):**
-    * *Target:* Perpindahan antar-layar maupun antar-list terasa halus (*smooth*), tidak berpindah secara instan/kaku.
-9. **Animasi Geser Indikator Tab Orientasi (`StoreScreen.kt`):**
-    * *Target:* Saat memilih orientasi `Vertical` atau `Horizontal`, latar belakang tab aktif bergeser (*sliding indicator*) secara *fluid* dari satu sisi ke sisi lainnya.
-10. **Animasi Popup Meluas dari Titik Klik (`StoreDialogs.kt` / `StoreScreen.kt`):**
-    * *Target:* Pop-up (Zoom Lightbox, Numeric Keypad, Clear Dialog, Export Dialog) muncul dan menutup secara *fluid* dengan kesan meluas/mekar dari lokasi elemen yang diklik (bukan muncul kaku di tengah layar).
+1. **Rasio Kartu Produk Seragam `1:1` (`StoreScreen.kt`):** Selesai (`aspectRatio(1f)`).
+2. **Soft Keyboard & Auto-Scroll Pengaturan (`SettingsScreen.kt`):** Selesai dengan `BringIntoViewRequester` presisi dan penanganan IME.
+3. **Kontras Teks Banner Error di Mode Terang:** Selesai.
+4. **Gestur Pull-to-Refresh (`StoreSearchScreen.kt`):** Selesai.
+5. **Kontras Latar Placeholder Kartu `-000` di Mode Terang:** Selesai.
+6. **Dashed Border Penuh di Keempat Sisi Kartu `-000` (`StoreScreen.kt`):** Selesai.
+7. **Optimasi Performa `LazyVerticalGrid` Anti-Lag (`StoreScreen.kt`):** Selesai dengan migrasi ke `AsyncImage` Coil (bebas *subcomposition jank*).
+8. **Transisi Halus Antar-Tab, Antar-List & Antar-Layar (`StoreScreen.kt`):** Selesai dengan *fluid directional slide* dan *AnimatedContent*.
+9. **Floating Orientation Bar Melayang Berikon Gimmick (`StoreScreen.kt`):** Selesai dengan bentuk `CircleShape` penuh, animasi muncul/hilang (*Fade + Expand/Shrink*), dan ikon `VerticalSplit`/`HorizontalSplit`.
+10. **Animasi Popup Meluas dari Titik Klik (`StoreDialogs.kt`):** Selesai.
+11. **Penyempurnaan Tambahan V0.2-Alpha:**
+    * *Auto-scroll* pill list aktif secara otomatis (`pillListState`).
+    * Modal Clear berukuran dinamis yang mendukung nama toko & list panjang tanpa terpotong.
+    * Garis hitung mundur (*countdown progress line*) pada Snackbar Urungkan (5 detik).
+    * Pilihan tema pengaturan dengan ikon gimmick (`BrightnessAuto`, `WbSunny`, `DarkMode`).
+    * Penguncian skala font aplikasi di `1.0f` untuk mengabaikan pengaturan skala teks sistem perangkat.
 
-## 8. Langkah Berikutnya
+## 8. Langkah Berikutnya (Progres Selanjutnya)
 
-1. Pastikan pengerjaan dilakukan di *branch* Git terpisah (mis. `feature/qol-rework`) sebelum di-merge ke `main`.
-2. Evaluasi dan kerjakan ulang **10 poin QoL di Bagian 7** secara bertahap per file (1–2 file per sesi/giliran) agar hemat token dan mudah diuji.
-3. Lakukan pengujian menyeluruh di HP fisik setelah seluruh poin QoL selesai diperbaiki.
+1. Lakukan pengujian lapangan (*field testing*) aplikasi V0.2-Alpha oleh tim MD di lapangan.
+2. Evaluasi laporan ekspor `.xlsx` dan sinkronisasi offline-first.
+3. Menuju ke fase pengembangan fitur lanjutan berikutnya sesuai kebutuhan operasional OEI MD–WH.
