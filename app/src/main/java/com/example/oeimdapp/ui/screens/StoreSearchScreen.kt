@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +44,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -270,7 +272,7 @@ fun StoreSearchScreen(
                     text = errorMsg,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = colors.habisBadgeText,
+                    color = colors.habisStepperBtnText,
                     modifier = Modifier.weight(1f)
                 )
                 TextButton(
@@ -281,20 +283,26 @@ fun StoreSearchScreen(
                         text = "OK",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = colors.habisBadgeText
+                        color = colors.habisStepperBtnText
                     )
                 }
             }
         }
 
         // ==========================================
-        // DAFTAR TOKO MITRA
+        // DAFTAR TOKO MITRA (DENGAN PULL-TO-REFRESH)
         // ==========================================
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        @OptIn(ExperimentalMaterial3Api::class)
+        PullToRefreshBox(
+            isRefreshing = viewModel.isSyncing,
+            onRefresh = { viewModel.syncNow(forceRefresh = true) },
+            modifier = Modifier.fillMaxSize()
         ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
             // 1. Pintasan "Toko Terakhir Dibuka" (hanya tampil saat kolom pencarian kosong)
             if (searchQuery.isBlank() && lastOpenedStore != null) {
                 item(key = "last_opened_section") {
@@ -433,6 +441,7 @@ fun StoreSearchScreen(
             }
         }
     }
+}
 }
 
 @OptIn(ExperimentalLayoutApi::class)

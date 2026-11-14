@@ -1,5 +1,11 @@
 package com.example.oeimdapp.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -97,14 +103,19 @@ fun ExportVerificationDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.9f)
-                .padding(horizontal = 14.dp),
-            shape = RoundedCornerShape(20.dp),
-            color = colors.elevatedSurface,
-            border = BorderStroke(1.dp, colors.borderStrong),
+        AnimatedVisibility(
+            visible = true,
+            enter = scaleIn(initialScale = 0.75f) + fadeIn(animationSpec = tween(220)),
+            exit = scaleOut(targetScale = 0.75f) + fadeOut(animationSpec = tween(180))
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.9f)
+                    .padding(horizontal = 14.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = colors.elevatedSurface,
+                border = BorderStroke(1.dp, colors.borderStrong),
             shadowElevation = 10.dp
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -415,11 +426,11 @@ fun ExportVerificationDialog(
                                             .background(Color(0xFFF1F5F9))
                                             .border(1.dp, Color(0xFFCBD5E1))
                                     ) {
-                                        PreviewCell("Alias_Jenis_Produk-KODE", 165, isBold = true, textAlign = TextAlign.Start)
-                                        PreviewCell("Jumlah_Target", 95, isBold = true)
-                                        PreviewCell("Jumlah_Dihitung", 105, isBold = true)
-                                        PreviewCell("Stok_Dibutuhkan", 110, isBold = true)
-                                        PreviewCell("Best_Seller", 80, isBold = true)
+                                        PreviewCell("Kode Produk", 165, isBold = true, textAlign = TextAlign.Start)
+                                        PreviewCell("Jumlah Target", 95, isBold = true)
+                                        PreviewCell("Jumlah Dihitung", 105, isBold = true)
+                                        PreviewCell("Stok Dibutuhkan", 110, isBold = true)
+                                        PreviewCell("Best Seller", 80, isBold = true)
                                     }
 
                                     // Baris Data
@@ -601,6 +612,7 @@ fun ExportVerificationDialog(
             }
         }
     }
+}
 }
 
 @Composable

@@ -6,6 +6,13 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
@@ -61,57 +68,71 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = OeiTheme.colors.appBackground
                 ) {
-                    when (currentScreen) {
-                        AppScreen.SETTINGS -> {
-                            BackHandler(enabled = viewModel.isConfigured) {
-                                viewModel.clearSyncFeedback()
-                                currentScreen = previousScreen
+                    AnimatedContent(
+                        targetState = currentScreen,
+                        transitionSpec = {
+                            if (targetState.ordinal > initialState.ordinal) {
+                                (slideInHorizontally { width -> width / 3 } + fadeIn(tween(250)))
+                                    .togetherWith(slideOutHorizontally { width -> -width / 3 } + fadeOut(tween(200)))
+                            } else {
+                                (slideInHorizontally { width -> -width / 3 } + fadeIn(tween(250)))
+                                    .togetherWith(slideOutHorizontally { width -> width / 3 } + fadeOut(tween(200)))
                             }
+                        },
+                        label = "screenTransition"
+                    ) { targetAppScreen ->
+                        when (targetAppScreen) {
+                            AppScreen.SETTINGS -> {
+                                BackHandler(enabled = viewModel.isConfigured) {
+                                    viewModel.clearSyncFeedback()
+                                    currentScreen = previousScreen
+                                }
 
-                            SettingsScreen(
-                                viewModel = viewModel,
-                                canNavigateBack = viewModel.isConfigured,
-                                onNavigateBack = {
-                                    currentScreen = if (viewModel.isConfigured) {
-                                        previousScreen
-                                    } else {
-                                        AppScreen.STORE_SEARCH
+                                SettingsScreen(
+                                    viewModel = viewModel,
+                                    canNavigateBack = viewModel.isConfigured,
+                                    onNavigateBack = {
+                                        currentScreen = if (viewModel.isConfigured) {
+                                            previousScreen
+                                        } else {
+                                            AppScreen.STORE_SEARCH
+                                        }
                                     }
-                                }
-                            )
-                        }
-
-                        AppScreen.STORE_SEARCH -> {
-                            StoreSearchScreen(
-                                viewModel = viewModel,
-                                onOpenStore = {
-                                    currentScreen = AppScreen.STORE_DETAIL
-                                },
-                                onOpenSettings = {
-                                    previousScreen = AppScreen.STORE_SEARCH
-                                    currentScreen = AppScreen.SETTINGS
-                                }
-                            )
-                        }
-
-                        AppScreen.STORE_DETAIL -> {
-                            BackHandler {
-                                currentScreen = AppScreen.STORE_SEARCH
+                                )
                             }
 
-                            StoreScreen(
-                                viewModel = viewModel,
-                                onNavigateBack = {
+                            AppScreen.STORE_SEARCH -> {
+                                StoreSearchScreen(
+                                    viewModel = viewModel,
+                                    onOpenStore = {
+                                        currentScreen = AppScreen.STORE_DETAIL
+                                    },
+                                    onOpenSettings = {
+                                        previousScreen = AppScreen.STORE_SEARCH
+                                        currentScreen = AppScreen.SETTINGS
+                                    }
+                                )
+                            }
+
+                            AppScreen.STORE_DETAIL -> {
+                                BackHandler {
                                     currentScreen = AppScreen.STORE_SEARCH
-                                },
-                                onOpenSettings = {
-                                    previousScreen = AppScreen.STORE_DETAIL
-                                    currentScreen = AppScreen.SETTINGS
-                                },
-                                onOpenExportDialog = {
-                                    isExportDialogOpen = true
                                 }
-                            )
+
+                                StoreScreen(
+                                    viewModel = viewModel,
+                                    onNavigateBack = {
+                                        currentScreen = AppScreen.STORE_SEARCH
+                                    },
+                                    onOpenSettings = {
+                                        previousScreen = AppScreen.STORE_DETAIL
+                                        currentScreen = AppScreen.SETTINGS
+                                    },
+                                    onOpenExportDialog = {
+                                        isExportDialogOpen = true
+                                    }
+                                )
+                            }
                         }
                     }
 

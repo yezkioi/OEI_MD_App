@@ -102,8 +102,8 @@ fun StoreScreen(
     val currentList = storeLists.find { it.id == viewModel.selectedListId } ?: storeLists.firstOrNull()
 
     // State untuk berbagai modal dialog di layar toko
-    var zoomItem: ItemDto? by remember { mutableStateOf(null) }
-    var keypadTargetItem: ItemDto? by remember { mutableStateOf(null) }
+    var zoomItem by remember { mutableStateOf<ItemDto?>(null) }
+    var keypadTargetItem by remember { mutableStateOf<ItemDto?>(null) }
     var isZeroCardKeypadOpen: Boolean by remember { mutableStateOf(false) }
     var isClearDialogOpen: Boolean by remember { mutableStateOf(false) }
 
@@ -279,40 +279,57 @@ fun StoreScreen(
             }
 
             // ==========================================
-            // 3. TAB ORIENTASI (HANYA UNTUK pisah_orientasi == true)
+            // 3. TAB ORIENTASI (DENGAN ANIMASI GESER FLUID)
             // ==========================================
             if (currentList != null && currentList.pisahOrientasi) {
                 val orientations = listOf("Vertical", "Horizontal")
-                Row(
+                val isHorizontalSelected = viewModel.selectedOrientation.equals("Horizontal", ignoreCase = true)
+                val targetBias by androidx.compose.animation.core.animateFloatAsState(
+                    targetValue = if (isHorizontalSelected) 1f else -1f,
+                    animationSpec = androidx.compose.animation.core.tween(durationMillis = 250),
+                    label = "orientationTabAnimation"
+                )
+
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 10.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(colors.elevatedSurface)
                         .border(1.dp, colors.border, RoundedCornerShape(12.dp))
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        .padding(4.dp)
                 ) {
-                    orientations.forEach { orientation ->
-                        val isTabSelected = viewModel.selectedOrientation.equals(orientation, ignoreCase = true)
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(9.dp))
-                                .background(
-                                    if (isTabSelected) colors.primaryAction
-                                    else Color.Transparent
+                    // Kapsul Penanda Aktif dengan Animasi Geser Smooth
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.5f)
+                            .align(androidx.compose.ui.BiasAlignment(horizontalBias = targetBias, verticalBias = 0f))
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(colors.primaryAction)
+                            .height(34.dp)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        orientations.forEach { orientation ->
+                            val isTabSelected = viewModel.selectedOrientation.equals(orientation, ignoreCase = true)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(9.dp))
+                                    .clickable { viewModel.selectOrientation(orientation) }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = orientation,
+                                    fontSize = 13.sp,
+                                    fontWeight = if (isTabSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isTabSelected) colors.onPrimaryAction else colors.textSecondary
                                 )
-                                .clickable { viewModel.selectOrientation(orientation) }
-                                .padding(vertical = 8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = orientation,
-                                fontSize = 13.sp,
-                                fontWeight = if (isTabSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isTabSelected) colors.onPrimaryAction else colors.textSecondary
-                            )
+                            }
                         }
                     }
                 }
@@ -321,10 +338,9 @@ fun StoreScreen(
             }
 
             // ==========================================
-            // 4. GRID 3 KOLOM KARTU PRODUK + KARTU ALIAS-000
+            // 4. GRID 3 KOLOM KARTU PRODUK (OPTIMIZED)
             // ==========================================
             if (currentList != null) {
-                // Pertahankan urutan asli server (`urut`), hanya filter orientasi jika dipisah
                 val visibleItems = remember(currentList, viewModel.selectedOrientation) {
                     if (currentList.pisahOrientasi) {
                         currentList.items.filter {
@@ -335,7 +351,6 @@ fun StoreScreen(
                     }
                 }
 
-                // Kunci penyimpanan untuk kartu ALIAS-000 di Room
                 val zeroItemKey = remember(currentList.id, currentList.pisahOrientasi, viewModel.selectedOrientation) {
                     if (currentList.pisahOrientasi) {
                         if (viewModel.selectedOrientation.equals("Horizontal", ignoreCase = true)) "000-H"
@@ -354,14 +369,15 @@ fun StoreScreen(
                         start = 10.dp,
                         end = 10.dp,
                         top = 2.dp,
-                        bottom = 96.dp // Ruang lega agar baris terbawah tidak tertutup Floating Pill Dock
+                        bottom = 96.dp
                     ),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(
                         items = visibleItems,
-                        key = { "${currentList.id}_${it.kode}" }
+                        key = { "${currentList.id}_${it.kode}" },
+                        contentType = { "product_stock_card" }
                     ) { item ->
                         val count = viewModel.getCount(currentList.id, item.kode)
                         ProductStockCard(
@@ -376,7 +392,10 @@ fun StoreScreen(
                     }
 
                     // Kartu Khusus ALIAS-000 di posisi paling akhir grid
-                    item(key = "${currentList.id}_$zeroItemKey") {
+                    item(
+                        key = "${currentList.id}_$zeroItemKey",
+                        contentType = "extra_zero_card"
+                    ) {
                         ExtraZeroStockCard(
                             label = zeroItemLabel,
                             count = zeroItemCount,
@@ -489,35 +508,36 @@ fun StoreScreen(
                     }
                 }
             }
-        }
-    }
 
     // ==========================================
     // RENDER MODAL DIALOGS
     // ==========================================
-    if (currentList != null) {
+    val activeList = currentList
+    if (activeList != null) {
         // 1. Zoom Lightbox Dialog
-        zoomItem?.let { item ->
-            val liveCount = viewModel.getCount(currentList.id, item.kode)
+        val zItem = zoomItem
+        if (zItem != null) {
+            val liveCount = viewModel.getCount(activeList.id, zItem.kode)
             ZoomLightboxDialog(
-                item = item,
-                showOrientation = currentList.pisahOrientasi,
+                item = zItem,
+                showOrientation = activeList.pisahOrientasi,
                 currentCount = liveCount,
-                onUpdateCount = { newVal -> viewModel.updateItemCount(currentList.id, item.kode, newVal) },
+                onUpdateCount = { newVal: Int -> viewModel.updateItemCount(activeList.id, zItem.kode, newVal) },
                 onDismiss = { zoomItem = null }
             )
         }
 
         // 2. Modal Numeric Keypad untuk Item Reguler
-        keypadTargetItem?.let { item ->
-            val liveCount = viewModel.getCount(currentList.id, item.kode)
+        val kItem = keypadTargetItem
+        if (kItem != null) {
+            val liveCount = viewModel.getCount(activeList.id, kItem.kode)
             NumericKeypadDialog(
-                itemLabel = item.label,
-                target = item.target,
+                itemLabel = kItem.label,
+                target = kItem.target,
                 initialValue = liveCount,
                 onDismiss = { keypadTargetItem = null },
-                onConfirm = { newVal ->
-                    viewModel.updateItemCount(currentList.id, item.kode, newVal)
+                onConfirm = { newVal: Int ->
+                    viewModel.updateItemCount(activeList.id, kItem.kode, newVal)
                     keypadTargetItem = null
                 }
             )
@@ -525,20 +545,20 @@ fun StoreScreen(
 
         // 3. Modal Numeric Keypad untuk Kartu ALIAS-000
         if (isZeroCardKeypadOpen) {
-            val zeroKey = if (currentList.pisahOrientasi) {
+            val zeroKey = if (activeList.pisahOrientasi) {
                 if (viewModel.selectedOrientation.equals("Horizontal", ignoreCase = true)) "000-H"
                 else "000-V"
             } else {
                 "000"
             }
-            val liveZeroCount = viewModel.getCount(currentList.id, zeroKey)
+            val liveZeroCount = viewModel.getCount(activeList.id, zeroKey)
             NumericKeypadDialog(
-                itemLabel = "${currentList.jenisAlias}-000",
+                itemLabel = "${activeList.jenisAlias}-000",
                 target = null,
                 initialValue = liveZeroCount,
                 onDismiss = { isZeroCardKeypadOpen = false },
-                onConfirm = { newVal ->
-                    viewModel.updateItemCount(currentList.id, zeroKey, newVal)
+                onConfirm = { newVal: Int ->
+                    viewModel.updateItemCount(activeList.id, zeroKey, newVal)
                     isZeroCardKeypadOpen = false
                 }
             )
@@ -547,12 +567,12 @@ fun StoreScreen(
         // 4. Dialog Konfirmasi Clear
         if (isClearDialogOpen) {
             ClearConfirmDialog(
-                currentListName = currentList.nama,
+                currentListName = activeList.nama,
                 storeName = store.nama,
                 onClearCurrentList = {
                     isClearDialogOpen = false
                     viewModel.clearCurrentList()
-                    triggerUndoSnackbar("List ${currentList.nama} direset ke 0")
+                    triggerUndoSnackbar("List ${activeList.nama} direset ke 0")
                 },
                 onClearAllStoreLists = {
                     isClearDialogOpen = false
@@ -563,6 +583,8 @@ fun StoreScreen(
             )
         }
     }
+}
+}
 }
 
 // ==========================================
@@ -619,7 +641,7 @@ private fun ListPillButton(
 }
 
 // ==========================================
-// KARTU PRODUK REGULER (GRID 3 KOLOM)
+// KARTU PRODUK REGULER (RATIO 1:1 SERAGAM)
 // ==========================================
 @Composable
 private fun ProductStockCard(
@@ -634,7 +656,6 @@ private fun ProductStockCard(
     val colors = OeiTheme.colors
     var useFallbackUrl: Boolean by remember(item.fileId) { mutableStateOf(false) }
 
-    // Penentuan status & token warna kartu
     val borderColor: Color
     val photoBgColor: Color
     val cardBgColor: Color
@@ -685,12 +706,8 @@ private fun ProductStockCard(
         }
     }
 
-    // Rasio aspek dinamis: Vertical 4:4.6, Horizontal 4:3, Non-orientasi 1:1
-    val imageAspectRatio = when {
-        !pisahOrientasi -> 1f
-        item.orientasi.equals("Horizontal", ignoreCase = true) -> 4f / 3f
-        else -> 4f / 4.6f
-    }
+    // Poin 1: Menyatukan seluruh card produk ke rasio 1:1 yang pas dan seragam
+    val imageAspectRatio = 1f
 
     val imageUrl = if (!useFallbackUrl) {
         "https://drive.google.com/thumbnail?id=${item.fileId}&sz=w400"
@@ -705,7 +722,6 @@ private fun ProductStockCard(
         border = BorderStroke(2.dp, borderColor)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // 1. Bingkai Gambar di Atas (Ketuk untuk Zoom Lightbox)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -763,33 +779,10 @@ private fun ProductStockCard(
                                     useFallbackUrl = true
                                 }
                             }
-                            if (useFallbackUrl) {
-                                Column(
-                                    modifier = Modifier.padding(4.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.BrokenImage,
-                                        contentDescription = null,
-                                        tint = colors.textSecondary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = item.label,
-                                        style = ItemCodeTextStyle.copy(fontSize = 10.sp),
-                                        color = colors.textSecondary,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
                         }
                     )
                 }
 
-                // Lencana Pojok Kiri Atas: ★ Best
                 if (item.bestSeller) {
                     Box(
                         modifier = Modifier
@@ -809,7 +802,6 @@ private fun ProductStockCard(
                 }
             }
 
-            // 2. Strip Metadata: Kode ALIAS-KODE di kiri, Target T:X di kanan
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -832,7 +824,6 @@ private fun ProductStockCard(
                 )
             }
 
-            // 3. Lencana Status Selebar Kartu
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -853,7 +844,6 @@ private fun ProductStockCard(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // 4. Full-Width Tactile Stepper Bar (36.dp) di Dasar Kartu: [ − ] | [ angka ] | [ + ]
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -868,12 +858,7 @@ private fun ProductStockCard(
                         .clickable(onClick = onDecrement),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "−",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = stepperBtnText
-                    )
+                    Text(text = "−", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = stepperBtnText)
                 }
 
                 Box(
@@ -884,11 +869,7 @@ private fun ProductStockCard(
                         .clickable(onClick = onOpenKeypad),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = count.toString(),
-                        style = TabularNumberTextStyle.copy(fontSize = 14.sp),
-                        color = counterText
-                    )
+                    Text(text = count.toString(), style = TabularNumberTextStyle.copy(fontSize = 14.sp), color = counterText)
                 }
 
                 Box(
@@ -899,12 +880,7 @@ private fun ProductStockCard(
                         .clickable(onClick = onIncrement),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "+",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = stepperBtnText
-                    )
+                    Text(text = "+", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = stepperBtnText)
                 }
             }
         }
@@ -912,7 +888,7 @@ private fun ProductStockCard(
 }
 
 // ==========================================
-// KARTU KHUSUS ALIAS-000 (PRODUK DI LUAR LIST)
+// KARTU KHUSUS ALIAS-000 (GARIS PUTUS-PUTUS KELILING & BG Kontras)
 // ==========================================
 @Composable
 private fun ExtraZeroStockCard(
@@ -932,8 +908,11 @@ private fun ExtraZeroStockCard(
             .background(colors.elevatedSurface)
             .drawBehind {
                 val strokeWidth = 2.dp.toPx()
+                // Poin 6: Menggambar path dashed full di keliling card dengan inset agar sudutnya presisi
                 drawRoundRect(
                     color = dashedBorderColor,
+                    topLeft = androidx.compose.ui.geometry.Offset(strokeWidth / 2, strokeWidth / 2),
+                    size = androidx.compose.ui.geometry.Size(size.width - strokeWidth, size.height - strokeWidth),
                     style = Stroke(
                         width = strokeWidth,
                         pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 8f), 0f)
@@ -943,7 +922,7 @@ private fun ExtraZeroStockCard(
             }
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // 1. Kotak Abu-Abu Bertitik "Di luar list" (Rasio 1:1)
+            // Poin 5: zeroPlaceholderBg disesuaikan agar kontras pada tema terang
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -961,7 +940,6 @@ private fun ExtraZeroStockCard(
                 )
             }
 
-            // 2. Strip Label ALIAS-000
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -977,7 +955,6 @@ private fun ExtraZeroStockCard(
                 )
             }
 
-            // 3. Lencana "Tanpa Target"
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -998,7 +975,6 @@ private fun ExtraZeroStockCard(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // 4. Stepper Netral (36.dp) di Dasar Kartu
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1013,12 +989,7 @@ private fun ExtraZeroStockCard(
                         .clickable(onClick = onDecrement),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "−",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = colors.textPrimary
-                    )
+                    Text(text = "−", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
                 }
 
                 Box(
@@ -1029,11 +1000,7 @@ private fun ExtraZeroStockCard(
                         .clickable(onClick = onOpenKeypad),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = count.toString(),
-                        style = TabularNumberTextStyle.copy(fontSize = 14.sp),
-                        color = colors.textPrimary
-                    )
+                    Text(text = count.toString(), style = TabularNumberTextStyle.copy(fontSize = 14.sp), color = colors.textPrimary)
                 }
 
                 Box(
@@ -1044,12 +1011,7 @@ private fun ExtraZeroStockCard(
                         .clickable(onClick = onIncrement),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "+",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = colors.textPrimary
-                    )
+                    Text(text = "+", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
                 }
             }
         }

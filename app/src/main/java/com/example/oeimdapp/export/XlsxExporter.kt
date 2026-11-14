@@ -376,11 +376,11 @@ object XlsxExporter {
             // Baris header kolom
             val headerRow = rowIndex++
             sb.append("""<row r="$headerRow">""")
-            sb.append(inlineStringCell("A$headerRow", "Alias_Jenis_Produk-KODE", styleId = 3))
-            sb.append(inlineStringCell("B$headerRow", "Jumlah_Target", styleId = 3))
-            sb.append(inlineStringCell("C$headerRow", "Jumlah_Dihitung", styleId = 3))
-            sb.append(inlineStringCell("D$headerRow", "Stok_Dibutuhkan", styleId = 3))
-            sb.append(inlineStringCell("E$headerRow", "Best_Seller", styleId = 3))
+            sb.append(inlineStringCell("A$headerRow", "Kode Produk", styleId = 3))
+            sb.append(inlineStringCell("B$headerRow", "Jumlah Target", styleId = 3))
+            sb.append(inlineStringCell("C$headerRow", "Jumlah Dihitung", styleId = 3))
+            sb.append(inlineStringCell("D$headerRow", "Stok Dibutuhkan", styleId = 3))
+            sb.append(inlineStringCell("E$headerRow", "Best Seller", styleId = 3))
             sb.append("</row>")
 
             // Baris item

@@ -49,8 +49,8 @@ val LightPenuhCounterBg = Color(0xFFFFFFFF)
 val LightPenuhCounterText = Color(0xFF065F46)
 
 // Kartu ALIAS-000 - Light
-val LightZeroCardBorder = Color(0xFFCBD5E1)
-val LightZeroPlaceholderBg = Color(0xFFF1F5F9)
+val LightZeroCardBorder = Color(0xFF94A3B8)
+val LightZeroPlaceholderBg = Color(0xFFE2E8F0)
 
 // ==========================================
 // B. MODE GELAP — FIELD PRO DARK

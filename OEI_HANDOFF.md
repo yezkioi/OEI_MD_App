@@ -1,6 +1,6 @@
-# OEI MD–WH App: Dokumen Serah Terima (Handoff 004) - Versi Alpha 0.1
+# OEI MD–WH App: Dokumen Serah Terima (Handoff 004.1) - Versi Alpha 0.1 (QoL Improvements Iteration)
 
-> Untuk AI di chat berikutnya: baca seluruh dokumen ini sebelum membalas. Ini rangkuman lengkap dari proyek **OEI MD App** (Versi Alpha 0.1 — Aplikasi Pertama Kali Berjalan Lancar di HP). Semua keputusan di bagian **3, 4, 5, 6, dan 7 (Pedoman UI/UX Final)** **sudah dikunci dan disetujui pengguna — JANGAN diubah tanpa persetujuan eksplisit pengguna.**
+> Untuk AI di chat berikutnya (atau sesi chat lain): baca seluruh dokumen ini sebelum membalas. Ini rangkuman lengkap dari proyek **OEI MD App** (Versi Alpha 0.1). Semua keputusan di bagian **3, 4, 5, 6, dan 7 (Pedoman UI/UX Final)** **sudah dikunci dan disetujui pengguna — JANGAN diubah tanpa persetujuan eksplisit pengguna.** Di Handoff 004.1 ini, dicatat 10 poin penyempurnaan Quality of Life (QoL) yang telah dikerjakan sebagai referensi untuk evaluasi atau eksplorasi alternatif di sesi berikutnya.
 
 ---
 
@@ -282,11 +282,48 @@ Seluruh kendala kompilasi, crash runtime, dan kegagalan sync Gradle telah **berh
 
 ---
 
-## 10. Rencana Langkah Pengujian Selanjutnya (Pengujian Versi Alpha 0.1)
+## 11. Iterasi Perbaikan Quality of Life (QoL) — Versi Alpha 0.1 (Handoff 004.1)
+
+Berikut adalah daftar 10 poin perbaikan kenyamanan pengguna (*Quality of Life*) yang telah diimplementasikan sebagai upaya awal penyempurnaan Versi Alpha 0.1, dicatat sebagai referensi bagi sesi chat atau pengembang lain yang ingin mengeksplorasi pendekatan alternatif:
+
+1. **Rasio Kartu Produk Seragam (1:1):**
+   - *Masalah:* Rasio foto berbeda-beda antar orientasi (`4:4.6` dan `4:3`).
+   - *Solusi:* Seluruh kartu produk di `StoreScreen.kt` disatukan ke rasio **`1:1` (`aspectRatio(1f)`)** agar seragam dan simetris.
+2. **Penanganan Soft Keyboard (`SettingsScreen`):**
+   - *Masalah:* Kolom input tertutup oleh keyboard saat mengetik di layar Pengaturan.
+   - *Solusi:* Menambahkan modifier `.imePadding()` dan `.navigationBarsPadding()` pada kontainer `Column`.
+3. **Kontras Banner Notifikasi Light Mode:**
+   - *Masalah:* Teks putih pada banner latar terang sulit dibaca saat mode terang.
+   - *Solusi:* Memperbarui warna teks banner error/sukses menggunakan warna teks kontras tinggi (`colors.habisStepperBtnText` / `penuhStepperBtnText`).
+4. **Gestur Pull-to-Refresh:**
+   - *Masalah:* Belum ada gestur usap ke bawah untuk sinkronisasi ulang.
+   - *Solusi:* Mengintegrasikan komponen Material 3 `PullToRefreshBox` pada `StoreSearchScreen.kt` yang memicu `viewModel.syncNow(forceRefresh = true)`.
+5. **Warna Latar Placeholder Kartu "-000" (Light Mode):**
+   - *Masalah:* Latar area gambar kartu `-000` terlalu mirip dengan latar belakang aplikasi pada tema terang.
+   - *Solusi:* Memperbarui `LightZeroPlaceholderBg` di `Color.kt` menjadi abu-abu sejuk yang lebih kontras (`#E2E8F0`).
+6. **Dashed Border Full Keliling (4 Sisi) Kartu "-000":**
+   - *Masalah:* Garis putus-putus pada kartu `-000` hanya muncul di bagian tengah.
+   - *Solusi:* Menerapkan `drawBehind` bergaris putus-putus (`PathEffect.dashPathEffect`) mengelilingi seluruh 4 sisi area kotak gambar `-000`.
+7. **Optimalisasi Performa `LazyVerticalGrid`:**
+   - *Masalah:* Terasa lag saat scroll grid produk.
+   - *Solusi:* Menambahkan `key` dan `contentType` pada item grid, serta mengisolasi pembacaan state agar perubahan angka stok tidak memicu rekomposisi massal.
+8. **Transisi Antar Layar Smooth (`AnimatedContent`):**
+   - *Masalah:* Perpindahan antar layar aplikasi terlalu kaku.
+   - *Solusi:* Mengganti percabangan `when (currentScreen)` di `MainActivity.kt` dengan `AnimatedContent` (`slideInHorizontally` + `fadeIn`).
+9. **Animasi Geser Tab Orientasi (`Animated Offset`):**
+   - *Masalah:* Pemilih tab orientasi Vertical/Horizontal berganti secara instan.
+   - *Solusi:* Menerapkan `animateFloatAsState` dengan `BiasAlignment` untuk menggeser kapsul penanda tab secara fluid.
+10. **Animasi Popup Fluid (Scale & Fade):**
+    - *Masalah:* Dialog pop-up (Zoom Lightbox, Numeric Keypad, Clear Dialog, Export Dialog) muncul tiba-tiba.
+    - *Solusi:* Membungkus dialog dengan `AnimatedVisibility` menggunakan kombinasi `scaleIn(initialScale = 0.75f) + fadeIn()` dan `scaleOut() + fadeOut()`.
+
+---
+
+## 12. Rencana Langkah Pengujian Selanjutnya (Pengujian Versi Alpha 0.1)
 
 1. **Verifikasi Cold Start & Konfigurasi Awal:** Pastikan aplikasi terbuka mulus di HP langsung ke `SettingsScreen` saat URL & Token masih kosong.
 2. **Uji Integrasi End-to-End di HP:**
     - Input Nama MD, URL Web App, dan Token ➔ uji tombol *Sinkronkan Data Sekarang*.
-    - Uji pergantian tema (`Ikuti Sistem` / `Terang` / `Gelap`), pencarian toko & area, pengisian stok per orientasi (`Vertical`/`Horizontal`), kartu `-000`, Zoom Lightbox, Numeric Keypad, dan Clear + Urungkan 5 detik.
+    - Uji pergantian tema (`Ikuti Sistem` / `Terang` / `Dark`), pencarian toko & area, pengisian stok per orientasi (`Vertical`/`Horizontal`), kartu `-000`, Zoom Lightbox, Numeric Keypad, dan Clear + Urungkan 5 detik.
     - Uji **Export XLSX** (*Simpan Download* dan *Bagikan File*), lalu buka file `.xlsx` hasil generate di Google Sheets untuk memverifikasi tata letak tabel, 4 baris pemisah kosong, dan aksen warna merah.
 3. **Persiapan Rilis Beta:** Menyempurnakan hasil pengujian Alpha untuk siap didistribusikan ke tim Merchandiser (MD) di lapangan.
