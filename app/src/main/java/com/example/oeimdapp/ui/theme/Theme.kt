@@ -12,7 +12,9 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.Density
 import androidx.core.view.WindowCompat
 
 @Immutable
@@ -220,7 +222,11 @@ fun OeiAppTheme(
         }
     }
 
-    CompositionLocalProvider(LocalOeiColors provides extendedColors) {
+    val currentDensity = LocalDensity.current
+    CompositionLocalProvider(
+        LocalOeiColors provides extendedColors,
+        LocalDensity provides Density(density = currentDensity.density, fontScale = 1.0f)
+    ) {
         MaterialTheme(
             colorScheme = materialColors,
             typography = OeiTypography,
