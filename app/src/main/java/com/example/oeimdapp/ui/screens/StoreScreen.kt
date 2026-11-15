@@ -41,7 +41,6 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VerticalSplit
 import androidx.compose.ui.zIndex
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -283,38 +282,7 @@ fun StoreScreen(
                 }
             }
 
-            // Banner Notifikasi WH (jika ada pembaruan list)
-            viewModel.listUpdatedBanner?.let { bannerText ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(colors.kurangCardBg)
-                        .border(1.dp, colors.kurangBorder)
-                        .padding(horizontal = 14.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "Info: $bannerText",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = colors.kurangBadgeText
-                    )
-                    TextButton(
-                        onClick = { viewModel.dismissListUpdatedBanner() },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                    ) {
-                        Text(
-                            text = "Tutup",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = colors.kurangBadgeText
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             // ==========================================
             // 4. GRID 3 KOLOM KARTU PRODUK (DENGAN DIRECTIONAL ANIMATED CONTENT & SWIPE)
@@ -522,6 +490,23 @@ fun StoreScreen(
                     )
                 }
             }
+        }
+
+        // Floating Toast Notifikasi WH (jika ada pembaruan list)
+        viewModel.listUpdatedBanner?.let { bannerText ->
+            CountdownFloatingToast(
+                message = "Info: $bannerText",
+                onDismiss = { viewModel.dismissListUpdatedBanner() },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 76.dp),
+                durationMs = 5000L,
+                backgroundColor = colors.kurangCardBg,
+                textColor = colors.kurangBadgeText,
+                borderColor = colors.kurangBorder,
+                progressColor = colors.kurangBorder
+            )
         }
 
         // ==========================================

@@ -28,6 +28,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.WbSunny
@@ -55,6 +57,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -78,6 +81,7 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit
 ) {
     val colors = OeiTheme.colors
+    val context = LocalContext.current
 
     var mdNameInput by rememberSaveable { mutableStateOf(viewModel.mdName) }
     var urlInput by rememberSaveable { mutableStateOf(viewModel.webAppUrl) }
@@ -102,11 +106,14 @@ fun SettingsScreen(
     val urlRequester = remember { BringIntoViewRequester() }
     val tokenRequester = remember { BringIntoViewRequester() }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.appBackground)
     ) {
+        Column(
+            modifier = Modifier.fillMaxSize()
+        ) {
         // ==========================================
         // TOP APP BAR
         // ==========================================
@@ -432,6 +439,52 @@ fun SettingsScreen(
                         }
                     }
 
+                    // Tombol Load Semua Asset Gambar (Disabled jika belum pernah sinkron data)
+                    val isLoadImagesEnabled = viewModel.syncData != null &&
+                            viewModel.lastSyncTime.isNotBlank() &&
+                            !viewModel.isSyncing &&
+                            !viewModel.isPreloadingImages
+
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.saveSettings(mdNameInput, urlInput, tokenInput)
+                            viewModel.preloadAllImages(context)
+                        },
+                        enabled = isLoadImagesEnabled,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.5.dp, if (isLoadImagesEnabled) colors.primaryAction else colors.borderStrong)
+                    ) {
+                        if (viewModel.isPreloadingImages) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = colors.textPrimary
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = viewModel.preloadProgressText ?: "Memuat asset gambar...",
+                                fontWeight = FontWeight.SemiBold,
+                                color = colors.textPrimary
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.CloudDownload,
+                                contentDescription = null,
+                                tint = if (isLoadImagesEnabled) colors.textPrimary else colors.textSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Load Semua Asset Gambar",
+                                fontWeight = FontWeight.Bold,
+                                color = if (isLoadImagesEnabled) colors.textPrimary else colors.textSecondary
+                            )
+                        }
+                    }
+
                     // Banner Hasil Sinkronisasi (Sukses / Gagal)
                     viewModel.syncSuccessMessage?.let { msg ->
                         Box(
@@ -493,7 +546,7 @@ fun SettingsScreen(
                         onNavigateBack()
                     }
                 },
-                enabled = urlInput.isNotBlank() && tokenInput.isNotBlank() && !viewModel.isSyncing,
+                enabled = urlInput.isNotBlank() && tokenInput.isNotBlank() && !viewModel.isSyncing && !viewModel.isPreloadingImages,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 12.dp)
@@ -516,6 +569,31 @@ fun SettingsScreen(
                     fontWeight = FontWeight.Bold
                 )
             }
+        }
+    }
+
+        // Floating Toast Notifikasi Berhasil Memuat Asset Gambar (Auto-Dismiss 5 Detik)
+        viewModel.imagePreloadSuccessMessage?.let { successMsg ->
+            CountdownFloatingToast(
+                message = successMsg,
+                onDismiss = { viewModel.dismissImagePreloadSuccess() },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding(),
+                durationMs = 5000L,
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = colors.penuhBorder,
+                        modifier = Modifier.size(20.dp)
+                    )
+                },
+                backgroundColor = colors.penuhCardBg,
+                textColor = colors.penuhStepperBtnText,
+                borderColor = colors.penuhBorder,
+                progressColor = colors.penuhBorder
+            )
         }
     }
 }

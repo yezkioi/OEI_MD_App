@@ -1,11 +1,15 @@
 package com.example.oeimdapp.viewmodel
 
 import android.app.Application
+import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import coil.Coil
+import coil.request.CachePolicy
+import coil.request.ImageRequest
 import com.example.oeimdapp.data.local.AppDatabase
 import com.example.oeimdapp.data.local.ItemCountEntity
 import com.example.oeimdapp.data.model.ApiResponse
@@ -15,8 +19,10 @@ import com.example.oeimdapp.data.prefs.SettingPreferences
 import com.example.oeimdapp.data.remote.RetrofitClient
 import com.example.oeimdapp.data.repository.OeiRepository
 import com.google.gson.Gson
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -54,7 +60,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 appToken.isNotBlank()
 
     // ==========================================
-    // 2. STATE DATA SINKRONISASI (OFFLINE-FIRST)
+    // 2. STATE DATA SINKRONISASI & ASSET GAMBAR (OFFLINE-FIRST)
     // ==========================================
     var syncData: ApiResponse? by mutableStateOf(null)
         private set
@@ -69,6 +75,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     var listUpdatedBanner: String? by mutableStateOf(null)
+        private set
+
+    var isPreloadingImages: Boolean by mutableStateOf(false)
+        private set
+
+    var preloadProgressText: String? by mutableStateOf(null)
+        private set
+
+    var imagePreloadSuccessMessage: String? by mutableStateOf(null)
         private set
 
     // ==========================================
@@ -140,6 +155,106 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissListUpdatedBanner() {
         listUpdatedBanner = null
+    }
+
+    fun dismissImagePreloadSuccess() {
+        imagePreloadSuccessMessage = null
+    }
+
+    fun preloadAllImages(context: Context) {
+        if (webAppUrl.isBlank() || appToken.isBlank()) {
+            syncError = "URL Web App dan Token Akses wajib diisi terlebih dahulu."
+            return
+        }
+
+        viewModelScope.launch {
+            isPreloadingImages = true
+            preloadProgressText = "Menyinkronkan data..."
+            imagePreloadSuccessMessage = null
+            syncError = null
+
+            try {
+                // 1. Sinkronisasi data terbaru terlebih dahulu di latar belakang
+                val response = repository.syncFromServer(
+                    webAppUrl = webAppUrl,
+                    token = appToken,
+                    noCache = 1
+                )
+
+                if (!response.ok) {
+                    syncError = "Server menolak permintaan. Periksa kembali Token Akses."
+                } else {
+                    val oldLists = syncData?.lists.orEmpty()
+                    val hasListChanged = oldLists.isEmpty() || oldLists.any { (id, oldList) ->
+                        val newList = response.lists[id]
+                        newList == null || oldList.hash != newList.hash
+                    } || response.lists.any { (id, _) -> oldLists[id] == null }
+
+                    if (hasListChanged) {
+                        listUpdatedBanner = "List diperbarui oleh WH"
+                    }
+
+                    syncData = response
+                    prefs.cachedSyncJson = gson.toJson(response)
+
+                    val nowText = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())
+                    lastSyncTime = nowText
+                    prefs.lastSyncTime = nowText
+
+                    // 2. Kumpulkan seluruh file_id unik dari seluruh lists
+                    val allFileIds = response.lists.values
+                        .flatMap { listDetail -> listDetail.items.mapNotNull { it.fileId.ifBlank { null } } }
+                        .distinct()
+
+                    if (allFileIds.isEmpty()) {
+                        imagePreloadSuccessMessage = "Tidak ada asset gambar untuk diunduh ✓"
+                    } else {
+                        val total = allFileIds.size
+                        val imageLoader = Coil.imageLoader(context)
+
+                        withContext(Dispatchers.IO) {
+                            allFileIds.forEachIndexed { index, fileId ->
+                                preloadProgressText = "Mengunduh gambar (${index + 1}/$total)..."
+
+                                val urlW400 = "https://drive.google.com/thumbnail?id=$fileId&sz=w400"
+                                val urlW800 = "https://drive.google.com/thumbnail?id=$fileId&sz=w800"
+
+                                runCatching {
+                                    imageLoader.execute(
+                                        ImageRequest.Builder(context)
+                                            .data(urlW400)
+                                            .memoryCachePolicy(CachePolicy.ENABLED)
+                                            .diskCachePolicy(CachePolicy.ENABLED)
+                                            .build()
+                                    )
+                                }
+
+                                runCatching {
+                                    imageLoader.execute(
+                                        ImageRequest.Builder(context)
+                                            .data(urlW800)
+                                            .memoryCachePolicy(CachePolicy.ENABLED)
+                                            .diskCachePolicy(CachePolicy.ENABLED)
+                                            .build()
+                                    )
+                                }
+                            }
+                        }
+                        imagePreloadSuccessMessage = "Asset sudah berhasil disimpan ✓"
+                    }
+                }
+            } catch (e: Exception) {
+                syncError = when {
+                    e.message?.contains("Unable to resolve host", ignoreCase = true) == true ->
+                        "Tidak ada koneksi internet. Gagal memuat asset gambar."
+                    else ->
+                        "Gagal memuat gambar: ${e.localizedMessage ?: "Periksa koneksi internet"}"
+                }
+            } finally {
+                isPreloadingImages = false
+                preloadProgressText = null
+            }
+        }
     }
 
     fun syncNow(forceRefresh: Boolean = true, onSuccess: (() -> Unit)? = null) {

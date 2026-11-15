@@ -77,11 +77,20 @@ fun ExportVerificationDialog(
     val store = viewModel.getStoreById(storeId) ?: return
     val storeLists = viewModel.getListsForStore(store)
 
+    // State pilihan list (default: seluruh list tercentang)
+    var selectedListIds by remember(storeId) {
+        mutableStateOf(storeLists.map { it.id }.toSet())
+    }
+
+    val selectedStoreLists = remember(storeLists, selectedListIds) {
+        storeLists.filter { selectedListIds.contains(it.id) }
+    }
+
     val reportId = remember(storeId) { viewModel.peekNextReportId() }
-    val previewData = remember(storeId, viewModel.currentStoreCounts, viewModel.openedListIdsByStore, viewModel.mdName) {
+    val previewData = remember(storeId, selectedStoreLists, viewModel.currentStoreCounts, viewModel.openedListIdsByStore, viewModel.mdName) {
         XlsxExporter.buildPreviewData(
             store = store,
-            storeLists = storeLists,
+            storeLists = selectedStoreLists,
             countsByList = viewModel.currentStoreCounts,
             openedListIds = viewModel.openedListIdsByStore[storeId].orEmpty(),
             mdName = viewModel.mdName,
@@ -222,13 +231,65 @@ fun ExportVerificationDialog(
                             color = colors.textSecondary
                         )
 
-                        // Daftar Status Tiap List
-                        previewData.listSummaries.forEach { summary ->
+                        // Checkbox Master "Pilih Semua List"
+                        val isAllSelected = selectedListIds.size == storeLists.size && storeLists.isNotEmpty()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(colors.subtleSurfaceAlt)
+                                .border(
+                                    width = 1.dp,
+                                    color = if (isAllSelected) colors.primaryAction else colors.borderStrong,
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .clickable {
+                                    selectedListIds = if (isAllSelected) {
+                                        emptySet()
+                                    } else {
+                                        storeLists.map { it.id }.toSet()
+                                    }
+                                }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = isAllSelected,
+                                onCheckedChange = { checked ->
+                                    selectedListIds = if (checked) storeLists.map { it.id }.toSet() else emptySet()
+                                },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = colors.primaryAction,
+                                    checkmarkColor = colors.onPrimaryAction
+                                )
+                            )
+                            Text(
+                                text = "Pilih Semua List (${selectedListIds.size}/${storeLists.size})",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.textPrimary
+                            )
+                        }
+
+                        // Daftar Status Tiap List dengan Checkbox Individu
+                        storeLists.forEach { listDetail ->
+                            val isListChecked = selectedListIds.contains(listDetail.id)
+                            val listCounts = viewModel.currentStoreCounts[listDetail.id].orEmpty()
+                            val isOpened = viewModel.openedListIdsByStore[storeId].orEmpty().contains(listDetail.id)
+                            val filledRegular = listDetail.items.count { (listCounts[it.kode] ?: 0) > 0 }
+                            val hasAnyCount = listCounts.values.any { it > 0 }
+
+                            val status = when {
+                                !isOpened && !hasAnyCount -> ExportListStatus.BELUM_DIBUKA
+                                !hasAnyCount -> ExportListStatus.SEMUA_NOL
+                                else -> ExportListStatus.TERISI
+                            }
+
                             val badgeLabel: String
                             val badgeBg: Color
                             val badgeText: Color
 
-                            when (summary.status) {
+                            when (status) {
                                 ExportListStatus.BELUM_DIBUKA -> {
                                     badgeLabel = "Belum dibuka"
                                     badgeBg = colors.habisBadgeBg
@@ -240,7 +301,7 @@ fun ExportVerificationDialog(
                                     badgeText = colors.kurangBadgeText
                                 }
                                 ExportListStatus.TERISI -> {
-                                    badgeLabel = "Terisi (${summary.filledCount}/${summary.totalCount})"
+                                    badgeLabel = "Terisi ($filledRegular/${listDetail.items.size})"
                                     badgeBg = colors.penuhBadgeBg
                                     badgeText = colors.penuhBadgeText
                                 }
@@ -250,18 +311,45 @@ fun ExportVerificationDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(colors.subtleSurface)
-                                    .border(1.dp, colors.border, RoundedCornerShape(10.dp))
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    .background(if (isListChecked) colors.subtleSurface else colors.subtleSurfaceAlt.copy(alpha = 0.5f))
+                                    .border(
+                                        1.dp,
+                                        if (isListChecked) colors.border else colors.borderStrong,
+                                        RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable {
+                                        selectedListIds = if (isListChecked) {
+                                            selectedListIds - listDetail.id
+                                        } else {
+                                            selectedListIds + listDetail.id
+                                        }
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                Checkbox(
+                                    checked = isListChecked,
+                                    onCheckedChange = { checked ->
+                                        selectedListIds = if (checked) {
+                                            selectedListIds + listDetail.id
+                                        } else {
+                                            selectedListIds - listDetail.id
+                                        }
+                                    },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = colors.primaryAction,
+                                        checkmarkColor = colors.onPrimaryAction
+                                    )
+                                )
                                 Text(
-                                    text = summary.listName,
+                                    text = listDetail.nama,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = colors.textPrimary,
-                                    modifier = Modifier.weight(1f)
+                                    color = if (isListChecked) colors.textPrimary else colors.textSecondary,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(end = 8.dp)
                                 )
                                 Box(
                                     modifier = Modifier
@@ -334,7 +422,7 @@ fun ExportVerificationDialog(
 
                         Button(
                             onClick = { isPreviewStep = true },
-                            enabled = isChecked,
+                            enabled = isChecked && selectedListIds.isNotEmpty(),
                             modifier = Modifier
                                 .weight(1.5f)
                                 .height(48.dp),
