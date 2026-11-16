@@ -100,6 +100,7 @@ fun ExportVerificationDialog(
     var isChecked by remember { mutableStateOf(false) }
     var isPreviewStep by remember { mutableStateOf(false) }
     var hasIncrementedCounter by remember { mutableStateOf(false) }
+    var hasSavedToDownloads by remember { mutableStateOf(false) }
 
     val hasUnopenedOrAllZero = previewData.listSummaries.any {
         it.status == ExportListStatus.BELUM_DIBUKA || it.status == ExportListStatus.SEMUA_NOL
@@ -151,16 +152,28 @@ fun ExportVerificationDialog(
                     if (isPreviewStep) {
                         IconButton(
                             onClick = {
-                                val result = XlsxExporter.shareXlsxFile(context, previewData)
-                                result.onSuccess {
+                                val saveResult = if (!hasSavedToDownloads) {
+                                    XlsxExporter.saveToDownloads(context, previewData)
+                                } else {
+                                    Result.success("File ${previewData.fileName} sudah tersimpan di Downloads")
+                                }
+
+                                saveResult.onSuccess { successMsg ->
                                     if (!hasIncrementedCounter) {
                                         viewModel.incrementReportCounter()
                                         hasIncrementedCounter = true
                                     }
-                                    viewModel.showExportToast("File ${previewData.fileName} siap dibagikan.")
-                                    onDismiss()
+                                    hasSavedToDownloads = true
+
+                                    val shareResult = XlsxExporter.shareXlsxFile(context, previewData)
+                                    shareResult.onSuccess {
+                                        viewModel.showExportToast("$successMsg & siap dibagikan.")
+                                        onDismiss()
+                                    }.onFailure { err ->
+                                        viewModel.showExportToast("Gagal membagikan file: ${err.localizedMessage}")
+                                    }
                                 }.onFailure { err ->
-                                    viewModel.showExportToast("Gagal membagikan file: ${err.localizedMessage}")
+                                    viewModel.showExportToast("Gagal menyimpan sebelum share: ${err.localizedMessage}")
                                 }
                             }
                         ) {
@@ -625,6 +638,7 @@ fun ExportVerificationDialog(
                                             viewModel.incrementReportCounter()
                                             hasIncrementedCounter = true
                                         }
+                                        hasSavedToDownloads = true
                                         viewModel.showExportToast(successMsg)
                                         onDismiss()
                                     }.onFailure { err ->
