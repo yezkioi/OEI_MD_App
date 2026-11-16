@@ -10,7 +10,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -101,8 +100,6 @@ fun ExportVerificationDialog(
     var isChecked by remember { mutableStateOf(false) }
     var isPreviewStep by remember { mutableStateOf(false) }
     var hasIncrementedCounter by remember { mutableStateOf(false) }
-    var feedbackMessage by remember { mutableStateOf<String?>(null) }
-    var isFeedbackError by remember { mutableStateOf(false) }
 
     val hasUnopenedOrAllZero = previewData.listSummaries.any {
         it.status == ExportListStatus.BELUM_DIBUKA || it.status == ExportListStatus.SEMUA_NOL
@@ -149,6 +146,30 @@ fun ExportVerificationDialog(
                             fontFamily = FontFamily.Monospace,
                             color = colors.textSecondary
                         )
+                    }
+
+                    if (isPreviewStep) {
+                        IconButton(
+                            onClick = {
+                                val result = XlsxExporter.shareXlsxFile(context, previewData)
+                                result.onSuccess {
+                                    if (!hasIncrementedCounter) {
+                                        viewModel.incrementReportCounter()
+                                        hasIncrementedCounter = true
+                                    }
+                                    viewModel.showExportToast("File ${previewData.fileName} siap dibagikan.")
+                                    onDismiss()
+                                }.onFailure { err ->
+                                    viewModel.showExportToast("Gagal membagikan file: ${err.localizedMessage}")
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "Bagikan File",
+                                tint = colors.textPrimary
+                            )
+                        }
                     }
 
                     IconButton(onClick = onDismiss) {
@@ -448,17 +469,16 @@ fun ExportVerificationDialog(
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // Lembar Pratinjau Putih ala Spreadsheet (Geser Horizontal untuk lihat seluruh kolom)
+                        // Lembar Pratinjau Putih ala Spreadsheet (Fit-to-width tanpa horizontal scroll)
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(Color.White)
                                 .border(1.dp, colors.borderStrong, RoundedCornerShape(12.dp))
-                                .horizontalScroll(rememberScrollState())
-                                .padding(12.dp)
+                                .padding(8.dp)
                         ) {
-                            Column {
+                            Column(modifier = Modifier.fillMaxWidth()) {
                                 // Header Laporan
                                 Text(
                                     text = "LAPORAN PENGECEKAN STOK",
@@ -508,17 +528,18 @@ fun ExportVerificationDialog(
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
 
-                                    // Baris Header Kolom
+                                    // Baris Header Kolom (Fit-to-width dengan weight)
                                     Row(
                                         modifier = Modifier
+                                            .fillMaxWidth()
                                             .background(Color(0xFFF1F5F9))
                                             .border(1.dp, Color(0xFFCBD5E1))
                                     ) {
-                                        PreviewCell("Kode Produk", 165, isBold = true, textAlign = TextAlign.Start)
-                                        PreviewCell("Jumlah Target", 95, isBold = true)
-                                        PreviewCell("Jumlah Dihitung", 105, isBold = true)
-                                        PreviewCell("Stok Dibutuhkan", 110, isBold = true)
-                                        PreviewCell("Best Seller", 80, isBold = true)
+                                        PreviewCell("Kode", modifier = Modifier.weight(2.0f), isBold = true, textAlign = TextAlign.Start, isCode = true)
+                                        PreviewCell("Target", modifier = Modifier.weight(0.85f), isBold = true)
+                                        PreviewCell("Hitung", modifier = Modifier.weight(0.85f), isBold = true)
+                                        PreviewCell("Butuh", modifier = Modifier.weight(0.85f), isBold = true)
+                                        PreviewCell("BS", modifier = Modifier.weight(0.75f), isBold = true)
                                     }
 
                                     // Baris Data
@@ -542,6 +563,7 @@ fun ExportVerificationDialog(
 
                                         Row(
                                             modifier = Modifier
+                                                .fillMaxWidth()
                                                 .background(rowBg)
                                                 .border(
                                                     width = if (row.isZeroRow) 1.5.dp else 0.5.dp,
@@ -550,7 +572,7 @@ fun ExportVerificationDialog(
                                         ) {
                                             PreviewCell(
                                                 text = row.label,
-                                                widthDp = 165,
+                                                modifier = Modifier.weight(2.0f),
                                                 isBold = row.isHabis || row.isZeroRow,
                                                 textColor = rowTextColor,
                                                 textAlign = TextAlign.Start,
@@ -558,26 +580,26 @@ fun ExportVerificationDialog(
                                             )
                                             PreviewCell(
                                                 text = row.targetText,
-                                                widthDp = 95,
+                                                modifier = Modifier.weight(0.85f),
                                                 isBold = row.isHabis || row.isZeroRow,
                                                 textColor = rowTextColor
                                             )
                                             PreviewCell(
                                                 text = row.counted.toString(),
-                                                widthDp = 105,
+                                                modifier = Modifier.weight(0.85f),
                                                 isBold = row.isHabis || row.isZeroRow,
                                                 textColor = rowTextColor
                                             )
                                             PreviewCell(
                                                 text = row.neededText,
-                                                widthDp = 110,
+                                                modifier = Modifier.weight(0.85f),
                                                 isBold = row.isHabis || row.isKurang || row.isZeroRow,
                                                 textColor = neededTextColor,
                                                 bgColor = neededBg
                                             )
                                             PreviewCell(
                                                 text = row.bestSellerText,
-                                                widthDp = 80,
+                                                modifier = Modifier.weight(0.75f),
                                                 isBold = row.isHabis || row.isZeroRow,
                                                 textColor = rowTextColor
                                             )
@@ -586,43 +608,16 @@ fun ExportVerificationDialog(
                                 }
                             }
                         }
-
-                        // Banner Umpan Balik Simpan / Bagikan
-                        feedbackMessage?.let { msg ->
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (isFeedbackError) colors.habisCardBg else colors.penuhCardBg)
-                                    .border(
-                                        1.dp,
-                                        if (isFeedbackError) colors.habisBorder else colors.penuhBorder,
-                                        RoundedCornerShape(10.dp)
-                                    )
-                                    .padding(12.dp)
-                            ) {
-                                Text(
-                                    text = msg,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (isFeedbackError) colors.habisBadgeText else colors.penuhBadgeText
-                                )
-                            }
-                        }
                     }
 
-                    // Tombol Simpan Download & Bagikan File
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    // Tombol Simpan Download (Sticky Footer di luar scroll)
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = colors.elevatedSurface,
+                        border = BorderStroke(1.dp, colors.borderStrong)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            OutlinedButton(
+                        Box(modifier = Modifier.padding(16.dp)) {
+                            Button(
                                 onClick = {
                                     val result = XlsxExporter.saveToDownloads(context, previewData)
                                     result.onSuccess { successMsg ->
@@ -630,51 +625,14 @@ fun ExportVerificationDialog(
                                             viewModel.incrementReportCounter()
                                             hasIncrementedCounter = true
                                         }
-                                        isFeedbackError = false
-                                        feedbackMessage = successMsg
+                                        viewModel.showExportToast(successMsg)
+                                        onDismiss()
                                     }.onFailure { err ->
-                                        isFeedbackError = true
-                                        feedbackMessage = "Gagal menyimpan: ${err.localizedMessage}"
+                                        viewModel.showExportToast("Gagal menyimpan: ${err.localizedMessage}")
                                     }
                                 },
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                border = BorderStroke(1.5.dp, colors.primaryAction)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.FileDownload,
-                                    contentDescription = null,
-                                    tint = colors.textPrimary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Simpan Download",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = colors.textPrimary
-                                )
-                            }
-
-                            Button(
-                                onClick = {
-                                    val result = XlsxExporter.shareXlsxFile(context, previewData)
-                                    result.onSuccess {
-                                        if (!hasIncrementedCounter) {
-                                            viewModel.incrementReportCounter()
-                                            hasIncrementedCounter = true
-                                        }
-                                        isFeedbackError = false
-                                        feedbackMessage = "File ${previewData.fileName} siap dibagikan."
-                                    }.onFailure { err ->
-                                        isFeedbackError = true
-                                        feedbackMessage = "Gagal membagikan file: ${err.localizedMessage}"
-                                    }
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
+                                    .fillMaxWidth()
                                     .height(48.dp),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.buttonColors(
@@ -683,14 +641,14 @@ fun ExportVerificationDialog(
                                 )
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Share,
+                                    imageVector = Icons.Default.FileDownload,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Bagikan File",
-                                    fontSize = 12.sp,
+                                    text = "Simpan Download",
+                                    fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -706,7 +664,7 @@ fun ExportVerificationDialog(
 @Composable
 private fun PreviewCell(
     text: String,
-    widthDp: Int,
+    modifier: Modifier = Modifier,
     isBold: Boolean = false,
     textColor: Color = Color(0xFF0F172A),
     bgColor: Color = Color.Transparent,
@@ -714,15 +672,14 @@ private fun PreviewCell(
     isCode: Boolean = false
 ) {
     Box(
-        modifier = Modifier
-            .width(widthDp.dp)
+        modifier = modifier
             .background(bgColor)
-            .padding(horizontal = 6.dp, vertical = 5.dp),
+            .padding(horizontal = 3.dp, vertical = 4.dp),
         contentAlignment = if (textAlign == TextAlign.Start) Alignment.CenterStart else Alignment.Center
     ) {
         Text(
             text = text,
-            style = if (isCode) ItemCodeTextStyle.copy(fontSize = 11.sp) else TabularBadgeTextStyle,
+            style = if (isCode) ItemCodeTextStyle.copy(fontSize = 10.sp) else TabularBadgeTextStyle.copy(fontSize = 10.sp),
             fontWeight = if (isBold) FontWeight.Bold else FontWeight.Normal,
             color = textColor,
             textAlign = textAlign,

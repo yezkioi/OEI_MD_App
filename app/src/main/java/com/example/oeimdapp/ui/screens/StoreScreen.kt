@@ -492,22 +492,7 @@ fun StoreScreen(
             }
         }
 
-        // Floating Toast Notifikasi WH (jika ada pembaruan list)
-        viewModel.listUpdatedBanner?.let { bannerText ->
-            CountdownFloatingToast(
-                message = "Info: $bannerText",
-                onDismiss = { viewModel.dismissListUpdatedBanner() },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(bottom = 76.dp),
-                durationMs = 5000L,
-                backgroundColor = colors.kurangCardBg,
-                textColor = colors.kurangBadgeText,
-                borderColor = colors.kurangBorder,
-                progressColor = colors.kurangBorder
-            )
-        }
+
 
         // ==========================================
         // 6. WARM CRAFT FLOATING PILL DOCK (CLEAR & EXPORT XLSX)

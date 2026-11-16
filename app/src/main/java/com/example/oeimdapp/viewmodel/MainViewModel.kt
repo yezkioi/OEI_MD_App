@@ -68,6 +68,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var isSyncing: Boolean by mutableStateOf(false)
         private set
 
+    var globalToastMessage: String? by mutableStateOf(null)
+        private set
+
+    var globalToastType: ToastType by mutableStateOf(ToastType.SUCCESS)
+        private set
+
+    enum class ToastType {
+        SUCCESS, ERROR, INFO
+    }
+
+    fun showGlobalToast(message: String, type: ToastType = ToastType.SUCCESS) {
+        globalToastMessage = message
+        globalToastType = type
+    }
+
+    fun dismissGlobalToast() {
+        globalToastMessage = null
+        syncError = null
+        syncSuccessMessage = null
+        listUpdatedBanner = null
+        imagePreloadSuccessMessage = null
+        exportToastMessage = null
+    }
+
     var syncError: String? by mutableStateOf(null)
         private set
 
@@ -84,6 +108,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     var imagePreloadSuccessMessage: String? by mutableStateOf(null)
+        private set
+
+    var exportToastMessage: String? by mutableStateOf(null)
         private set
 
     // ==========================================
@@ -148,6 +175,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         prefs.appToken = cleanToken
     }
 
+    private fun updateSyncError(err: String?) {
+        syncError = err
+        if (err != null) showGlobalToast(err, ToastType.ERROR)
+    }
+
+    private fun updateSyncSuccess(msg: String?) {
+        syncSuccessMessage = msg
+        if (msg != null) showGlobalToast(msg, ToastType.SUCCESS)
+    }
+
+    private fun updateListBanner(banner: String?) {
+        listUpdatedBanner = banner
+        if (banner != null) showGlobalToast("Info: $banner", ToastType.INFO)
+    }
+
+    private fun updateImagePreloadSuccess(msg: String?) {
+        imagePreloadSuccessMessage = msg
+        if (msg != null) showGlobalToast(msg, ToastType.SUCCESS)
+    }
+
     fun clearSyncFeedback() {
         syncError = null
         syncSuccessMessage = null
@@ -155,23 +202,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissListUpdatedBanner() {
         listUpdatedBanner = null
+        dismissGlobalToast()
     }
 
     fun dismissImagePreloadSuccess() {
         imagePreloadSuccessMessage = null
+        dismissGlobalToast()
+    }
+
+    fun showExportToast(message: String) {
+        exportToastMessage = message
+        showGlobalToast(message, ToastType.SUCCESS)
+    }
+
+    fun dismissExportToast() {
+        exportToastMessage = null
+        dismissGlobalToast()
     }
 
     fun preloadAllImages(context: Context) {
         if (webAppUrl.isBlank() || appToken.isBlank()) {
-            syncError = "URL Web App dan Token Akses wajib diisi terlebih dahulu."
+            updateSyncError("URL Web App dan Token Akses wajib diisi terlebih dahulu.")
             return
         }
 
         viewModelScope.launch {
             isPreloadingImages = true
             preloadProgressText = "Menyinkronkan data..."
-            imagePreloadSuccessMessage = null
-            syncError = null
+            updateImagePreloadSuccess(null)
+            updateSyncError(null)
 
             try {
                 // 1. Sinkronisasi data terbaru terlebih dahulu di latar belakang
@@ -182,7 +241,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
 
                 if (!response.ok) {
-                    syncError = "Server menolak permintaan. Periksa kembali Token Akses."
+                    updateSyncError("Server menolak permintaan. Periksa kembali Token Akses.")
                 } else {
                     val oldLists = syncData?.lists.orEmpty()
                     val hasListChanged = oldLists.isEmpty() || oldLists.any { (id, oldList) ->
@@ -191,7 +250,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     } || response.lists.any { (id, _) -> oldLists[id] == null }
 
                     if (hasListChanged) {
-                        listUpdatedBanner = "List diperbarui oleh WH"
+                        updateListBanner("List diperbarui oleh WH")
                     }
 
                     syncData = response
@@ -207,7 +266,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         .distinct()
 
                     if (allFileIds.isEmpty()) {
-                        imagePreloadSuccessMessage = "Tidak ada asset gambar untuk diunduh ✓"
+                        updateImagePreloadSuccess("Tidak ada asset gambar untuk diunduh ✓")
                     } else {
                         val total = allFileIds.size
                         val imageLoader = Coil.imageLoader(context)
@@ -240,16 +299,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 }
                             }
                         }
-                        imagePreloadSuccessMessage = "Asset sudah berhasil disimpan ✓"
+                        updateImagePreloadSuccess("Asset sudah berhasil disimpan ✓")
                     }
                 }
             } catch (e: Exception) {
-                syncError = when {
+                val err = when {
                     e.message?.contains("Unable to resolve host", ignoreCase = true) == true ->
                         "Tidak ada koneksi internet. Gagal memuat asset gambar."
                     else ->
                         "Gagal memuat gambar: ${e.localizedMessage ?: "Periksa koneksi internet"}"
                 }
+                updateSyncError(err)
             } finally {
                 isPreloadingImages = false
                 preloadProgressText = null
@@ -259,14 +319,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun syncNow(forceRefresh: Boolean = true, onSuccess: (() -> Unit)? = null) {
         if (webAppUrl.isBlank() || appToken.isBlank()) {
-            syncError = "URL Web App dan Token Akses wajib diisi terlebih dahulu."
+            updateSyncError("URL Web App dan Token Akses wajib diisi terlebih dahulu.")
             return
         }
 
         viewModelScope.launch {
             isSyncing = true
-            syncError = null
-            syncSuccessMessage = null
+            updateSyncError(null)
+            updateSyncSuccess(null)
             try {
                 val oldLists = syncData?.lists.orEmpty()
                 val response = repository.syncFromServer(
@@ -276,7 +336,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
 
                 if (!response.ok) {
-                    syncError = "Server menolak permintaan. Periksa kembali Token Akses."
+                    updateSyncError("Server menolak permintaan. Periksa kembali Token Akses.")
                 } else {
                     // Deteksi perubahan hash list dari WH
                     val hasListChanged = oldLists.isEmpty() || oldLists.any { (id, oldList) ->
@@ -285,7 +345,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     } || response.lists.any { (id, _) -> oldLists[id] == null }
 
                     if (hasListChanged) {
-                        listUpdatedBanner = "List diperbarui oleh WH"
+                        updateListBanner("List diperbarui oleh WH")
                     }
 
                     syncData = response
@@ -295,15 +355,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     lastSyncTime = nowText
                     prefs.lastSyncTime = nowText
 
-                    syncSuccessMessage = if (hasListChanged) {
+                    val successMsg = if (hasListChanged) {
                         "Sinkronisasi berhasil — List diperbarui oleh WH (${getActiveStores().size} toko)"
                     } else {
                         "Sinkronisasi berhasil (${getActiveStores().size} toko aktif)"
                     }
+                    updateSyncSuccess(successMsg)
                     onSuccess?.invoke()
                 }
             } catch (e: Exception) {
-                syncError = when {
+                val err = when {
                     e.message?.contains("Unable to resolve host", ignoreCase = true) == true ->
                         "Tidak ada koneksi internet. Menggunakan data offline tersimpan."
                     e.message?.contains("404") == true ->
@@ -311,6 +372,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     else ->
                         "Gagal sinkronisasi: ${e.localizedMessage ?: "Periksa URL & koneksi internet"}"
                 }
+                updateSyncError(err)
             } finally {
                 isSyncing = false
             }

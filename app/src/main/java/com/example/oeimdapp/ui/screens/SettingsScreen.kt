@@ -28,7 +28,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Refresh
@@ -572,28 +571,6 @@ fun SettingsScreen(
         }
     }
 
-        // Floating Toast Notifikasi Berhasil Memuat Asset Gambar (Auto-Dismiss 5 Detik)
-        viewModel.imagePreloadSuccessMessage?.let { successMsg ->
-            CountdownFloatingToast(
-                message = successMsg,
-                onDismiss = { viewModel.dismissImagePreloadSuccess() },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding(),
-                durationMs = 5000L,
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = colors.penuhBorder,
-                        modifier = Modifier.size(20.dp)
-                    )
-                },
-                backgroundColor = colors.penuhCardBg,
-                textColor = colors.penuhStepperBtnText,
-                borderColor = colors.penuhBorder,
-                progressColor = colors.penuhBorder
-            )
-        }
+
     }
 }

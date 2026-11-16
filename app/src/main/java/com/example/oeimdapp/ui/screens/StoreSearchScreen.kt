@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -378,38 +377,7 @@ fun StoreSearchScreen(
             }
         }
 
-        // ==========================================
-        // FLOATING TOAST NOTIFIKASI (AUTO-DISMISS 5 DETIK)
-        // ==========================================
-        viewModel.listUpdatedBanner?.let { bannerText ->
-            CountdownFloatingToast(
-                message = "Info: $bannerText",
-                onDismiss = { viewModel.dismissListUpdatedBanner() },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding(),
-                durationMs = 5000L,
-                backgroundColor = colors.kurangCardBg,
-                textColor = colors.kurangBadgeText,
-                borderColor = colors.kurangBorder,
-                progressColor = colors.kurangBorder
-            )
-        }
 
-        viewModel.syncError?.let { errorMsg ->
-            CountdownFloatingToast(
-                message = errorMsg,
-                onDismiss = { viewModel.clearSyncFeedback() },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding(),
-                durationMs = 5000L,
-                backgroundColor = colors.habisCardBg,
-                textColor = colors.habisStepperBtnText,
-                borderColor = colors.habisBorder,
-                progressColor = colors.habisBorder
-            )
-        }
     }
 }
 

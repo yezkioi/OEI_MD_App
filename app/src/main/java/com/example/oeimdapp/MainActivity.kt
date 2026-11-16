@@ -13,7 +13,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -21,7 +25,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.example.oeimdapp.ui.screens.CountdownFloatingToast
 import com.example.oeimdapp.ui.screens.ExportVerificationDialog
 import com.example.oeimdapp.ui.screens.SettingsScreen
 import com.example.oeimdapp.ui.screens.StoreScreen
@@ -69,79 +76,121 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = OeiTheme.colors.appBackground
                 ) {
-                    AnimatedContent(
-                        targetState = currentScreen,
-                        transitionSpec = {
-                            if (targetState.ordinal > initialState.ordinal) {
-                                (slideInHorizontally { width -> width / 3 } + fadeIn(tween(250)))
-                                    .togetherWith(slideOutHorizontally { width -> -width / 3 } + fadeOut(tween(200)))
-                            } else {
-                                (slideInHorizontally { width -> -width / 3 } + fadeIn(tween(250)))
-                                    .togetherWith(slideOutHorizontally { width -> width / 3 } + fadeOut(tween(200)))
-                            }
-                        },
-                        label = "screenTransition"
-                    ) { targetAppScreen ->
-                        when (targetAppScreen) {
-                            AppScreen.SETTINGS -> {
-                                BackHandler(enabled = viewModel.isConfigured) {
-                                    viewModel.clearSyncFeedback()
-                                    currentScreen = previousScreen
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        AnimatedContent(
+                            targetState = currentScreen,
+                            transitionSpec = {
+                                if (targetState.ordinal > initialState.ordinal) {
+                                    (slideInHorizontally { width -> width / 3 } + fadeIn(tween(250)))
+                                        .togetherWith(slideOutHorizontally { width -> -width / 3 } + fadeOut(tween(200)))
+                                } else {
+                                    (slideInHorizontally { width -> -width / 3 } + fadeIn(tween(250)))
+                                        .togetherWith(slideOutHorizontally { width -> width / 3 } + fadeOut(tween(200)))
                                 }
+                            },
+                            label = "screenTransition"
+                        ) { targetAppScreen ->
+                            when (targetAppScreen) {
+                                AppScreen.SETTINGS -> {
+                                    BackHandler(enabled = viewModel.isConfigured) {
+                                        viewModel.clearSyncFeedback()
+                                        currentScreen = previousScreen
+                                    }
 
-                                SettingsScreen(
-                                    viewModel = viewModel,
-                                    canNavigateBack = viewModel.isConfigured,
-                                    onNavigateBack = {
-                                        currentScreen = if (viewModel.isConfigured) {
-                                            previousScreen
-                                        } else {
-                                            AppScreen.STORE_SEARCH
+                                    SettingsScreen(
+                                        viewModel = viewModel,
+                                        canNavigateBack = viewModel.isConfigured,
+                                        onNavigateBack = {
+                                            currentScreen = if (viewModel.isConfigured) {
+                                                previousScreen
+                                            } else {
+                                                AppScreen.STORE_SEARCH
+                                            }
                                         }
-                                    }
-                                )
-                            }
-
-                            AppScreen.STORE_SEARCH -> {
-                                StoreSearchScreen(
-                                    viewModel = viewModel,
-                                    onOpenStore = {
-                                        currentScreen = AppScreen.STORE_DETAIL
-                                    },
-                                    onOpenSettings = {
-                                        previousScreen = AppScreen.STORE_SEARCH
-                                        currentScreen = AppScreen.SETTINGS
-                                    }
-                                )
-                            }
-
-                            AppScreen.STORE_DETAIL -> {
-                                BackHandler {
-                                    currentScreen = AppScreen.STORE_SEARCH
+                                    )
                                 }
 
-                                StoreScreen(
-                                    viewModel = viewModel,
-                                    onNavigateBack = {
+                                AppScreen.STORE_SEARCH -> {
+                                    StoreSearchScreen(
+                                        viewModel = viewModel,
+                                        onOpenStore = {
+                                            currentScreen = AppScreen.STORE_DETAIL
+                                        },
+                                        onOpenSettings = {
+                                            previousScreen = AppScreen.STORE_SEARCH
+                                            currentScreen = AppScreen.SETTINGS
+                                        }
+                                    )
+                                }
+
+                                AppScreen.STORE_DETAIL -> {
+                                    BackHandler {
                                         currentScreen = AppScreen.STORE_SEARCH
-                                    },
-                                    onOpenSettings = {
-                                        previousScreen = AppScreen.STORE_DETAIL
-                                        currentScreen = AppScreen.SETTINGS
-                                    },
-                                    onOpenExportDialog = {
-                                        isExportDialogOpen = true
                                     }
+
+                                    StoreScreen(
+                                        viewModel = viewModel,
+                                        onNavigateBack = {
+                                            currentScreen = AppScreen.STORE_SEARCH
+                                        },
+                                        onOpenSettings = {
+                                            previousScreen = AppScreen.STORE_DETAIL
+                                            currentScreen = AppScreen.SETTINGS
+                                        },
+                                        onOpenExportDialog = {
+                                            isExportDialogOpen = true
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        if (isExportDialogOpen) {
+                            ExportVerificationDialog(
+                                viewModel = viewModel,
+                                onDismiss = { isExportDialogOpen = false }
+                            )
+                        }
+
+                        // Floating Toast Global di Layer Paling Atas (Root Overlay)
+                        viewModel.globalToastMessage?.let { toastMsg ->
+                            val bg = when (viewModel.globalToastType) {
+                                MainViewModel.ToastType.ERROR -> OeiTheme.colors.habisCardBg
+                                MainViewModel.ToastType.INFO -> OeiTheme.colors.kurangCardBg
+                                MainViewModel.ToastType.SUCCESS -> OeiTheme.colors.penuhCardBg
+                            }
+                            val textCol = when (viewModel.globalToastType) {
+                                MainViewModel.ToastType.ERROR -> OeiTheme.colors.habisStepperBtnText
+                                MainViewModel.ToastType.INFO -> OeiTheme.colors.kurangBadgeText
+                                MainViewModel.ToastType.SUCCESS -> OeiTheme.colors.penuhStepperBtnText
+                            }
+                            val borderCol = when (viewModel.globalToastType) {
+                                MainViewModel.ToastType.ERROR -> OeiTheme.colors.habisBorder
+                                MainViewModel.ToastType.INFO -> OeiTheme.colors.kurangBorder
+                                MainViewModel.ToastType.SUCCESS -> OeiTheme.colors.penuhBorder
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(bottom = 16.dp),
+                                contentAlignment = Alignment.BottomCenter
+                            ) {
+                                CountdownFloatingToast(
+                                    message = toastMsg,
+                                    onDismiss = { viewModel.dismissGlobalToast() },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp)
+                                        .navigationBarsPadding(),
+                                    durationMs = 5000L,
+                                    backgroundColor = bg,
+                                    textColor = textCol,
+                                    borderColor = borderCol,
+                                    progressColor = borderCol
                                 )
                             }
                         }
-                    }
-
-                    if (isExportDialogOpen) {
-                        ExportVerificationDialog(
-                            viewModel = viewModel,
-                            onDismiss = { isExportDialogOpen = false }
-                        )
                     }
                 }
             }
