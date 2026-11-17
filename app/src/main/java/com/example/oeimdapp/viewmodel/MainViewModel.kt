@@ -12,6 +12,7 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.example.oeimdapp.data.local.AppDatabase
 import com.example.oeimdapp.data.local.ItemCountEntity
+import com.example.oeimdapp.data.local.UndoRedoEntity
 import com.example.oeimdapp.data.model.ApiResponse
 import com.example.oeimdapp.data.model.ListDetailDto
 import com.example.oeimdapp.data.model.StoreDto
@@ -31,7 +32,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val prefs = SettingPreferences(application)
     private val database = AppDatabase.getDatabase(application)
-    private val repository = OeiRepository(RetrofitClient.apiService, database.itemCountDao())
+    private val repository = OeiRepository(RetrofitClient.apiService, database.itemCountDao(), database.undoRedoDao())
     private val gson = Gson()
 
     // ==========================================
@@ -137,6 +138,57 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var lastClearedBackup: List<ItemCountEntity> = emptyList()
     private var rawStoreCountEntities: List<ItemCountEntity> = emptyList()
     private var countObserverJob: Job? = null
+
+    // ==========================================
+    // 3.5. STATE RIWAYAT UNDO & REDO TERISOLASI
+    // ==========================================
+    data class UndoRedoTargetEvent(
+        val targetKode: String,
+        val listId: String,
+        val stepperAction: String,
+        val eventId: Long = System.nanoTime()
+    )
+
+    var canUndo: Boolean by mutableStateOf(false)
+        private set
+
+    var canRedo: Boolean by mutableStateOf(false)
+        private set
+
+    var lastUndoRedoEvent: UndoRedoTargetEvent? by mutableStateOf(null)
+        private set
+
+    fun consumeUndoRedoEvent() {
+        lastUndoRedoEvent = null
+    }
+
+    private val undoStacks: MutableMap<String, MutableList<UndoRedoEntity>> = mutableMapOf()
+    private val redoStacks: MutableMap<String, MutableList<UndoRedoEntity>> = mutableMapOf()
+
+    private fun updateCanUndoRedoState() {
+        val storeId = selectedStoreId
+        val listId = selectedListId
+        if (storeId == null || listId == null) {
+            canUndo = false
+            canRedo = false
+            return
+        }
+        val key = "${storeId}_$listId"
+        canUndo = (undoStacks[key]?.isNotEmpty() == true)
+        canRedo = (redoStacks[key]?.isNotEmpty() == true)
+    }
+
+    private fun loadUndoRedoHistoryForList(storeId: String, listId: String) {
+        val key = "${storeId}_$listId"
+        viewModelScope.launch {
+            val history = repository.getUndoRedoHistoryForList(storeId, listId)
+            val undos = history.filter { it.stackType == "UNDO" }.sortedBy { it.stepOrder }.toMutableList()
+            val redos = history.filter { it.stackType == "REDO" }.sortedBy { it.stepOrder }.toMutableList()
+            undoStacks[key] = undos
+            redoStacks[key] = redos
+            updateCanUndoRedoState()
+        }
+    }
 
     init {
         loadCachedData()
@@ -450,6 +502,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             selectedOrientation = "Vertical"
         }
+
+        loadUndoRedoHistoryForList(storeId, listId)
     }
 
     fun selectOrientation(orientation: String) {
@@ -463,9 +517,60 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return currentStoreCounts[listId]?.get(kode) ?: 0
     }
 
-    fun updateItemCount(listId: String, kode: String, newCount: Int) {
+    private fun getFullListSnapshot(listId: String): Map<String, Int> {
+        val listDetail = syncData?.lists?.get(listId)
+        val fullSnapshot = mutableMapOf<String, Int>()
+        val currentCounts = currentStoreCounts[listId].orEmpty()
+        if (listDetail != null) {
+            listDetail.items.forEach { item ->
+                fullSnapshot[item.kode] = currentCounts[item.kode] ?: 0
+            }
+            currentCounts.forEach { (k, v) ->
+                if (k.startsWith("000")) {
+                    fullSnapshot[k] = v
+                }
+            }
+        } else {
+            fullSnapshot.putAll(currentCounts)
+        }
+        return fullSnapshot
+    }
+
+    fun updateItemCount(listId: String, kode: String, newCount: Int, stepperAction: String = "") {
         val storeId = selectedStoreId ?: return
         val safeCount = newCount.coerceIn(0, 9999)
+        val oldCount = getCount(listId, kode)
+
+        if (oldCount == safeCount) return
+
+        val key = "${storeId}_$listId"
+        val fullSnapshot = getFullListSnapshot(listId)
+
+        // Catat snapshot data SEBELUM perubahan ke Undo Stack
+        val undoEntity = UndoRedoEntity(
+            storeId = storeId,
+            listId = listId,
+            stackType = "UNDO",
+            stepOrder = undoStacks[key]?.size ?: 0,
+            snapshotJson = gson.toJson(fullSnapshot),
+            targetKode = kode,
+            stepperAction = stepperAction
+        )
+
+        val undoStack = undoStacks.getOrPut(key) { mutableListOf() }
+        undoStack.add(undoEntity)
+        if (undoStack.size > 10) {
+            undoStack.removeAt(0)
+        }
+
+        // Kosongkan Redo Stack setiap kali ada perubahan baru
+        redoStacks[key]?.clear()
+        viewModelScope.launch {
+            repository.clearRedoStack(storeId, listId)
+        }
+
+        updateCanUndoRedoState()
+
         viewModelScope.launch {
             repository.updateCount(
                 storeId = storeId,
@@ -473,13 +578,132 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 kode = kode,
                 count = safeCount
             )
+            persistUndoRedoStacks(storeId, listId)
+        }
+    }
+
+    fun performUndo() {
+        val storeId = selectedStoreId ?: return
+        val listId = selectedListId ?: return
+        val key = "${storeId}_$listId"
+
+        val undoStack = undoStacks[key] ?: return
+        if (undoStack.isEmpty()) return
+
+        val undoEntity = undoStack.removeAt(undoStack.lastIndex)
+
+        // Simpan kondisi saat ini ke Redo Stack sebelum memulihkan snapshot
+        val fullSnapshot = getFullListSnapshot(listId)
+        val redoEntity = UndoRedoEntity(
+            storeId = storeId,
+            listId = listId,
+            stackType = "REDO",
+            stepOrder = redoStacks[key]?.size ?: 0,
+            snapshotJson = gson.toJson(fullSnapshot),
+            targetKode = undoEntity.targetKode,
+            stepperAction = undoEntity.stepperAction
+        )
+        val redoStack = redoStacks.getOrPut(key) { mutableListOf() }
+        redoStack.add(redoEntity)
+        if (redoStack.size > 10) redoStack.removeAt(0)
+
+        // Pulihkan snapshot dari Undo
+        val snapshotType = object : com.google.gson.reflect.TypeToken<Map<String, Int>>() {}.type
+        val snapshotMap: Map<String, Int> = try {
+            gson.fromJson(undoEntity.snapshotJson, snapshotType)
+        } catch (_: Exception) {
+            emptyMap()
+        }
+
+        viewModelScope.launch {
+            snapshotMap.forEach { (kode, count) ->
+                repository.updateCount(storeId, listId, kode, count)
+            }
+            persistUndoRedoStacks(storeId, listId)
+        }
+
+        lastUndoRedoEvent = UndoRedoTargetEvent(
+            targetKode = undoEntity.targetKode,
+            listId = listId,
+            stepperAction = undoEntity.stepperAction
+        )
+        updateCanUndoRedoState()
+    }
+
+    fun performRedo() {
+        val storeId = selectedStoreId ?: return
+        val listId = selectedListId ?: return
+        val key = "${storeId}_$listId"
+
+        val redoStack = redoStacks[key] ?: return
+        if (redoStack.isEmpty()) return
+
+        val redoEntity = redoStack.removeAt(redoStack.lastIndex)
+
+        // Simpan kondisi saat ini ke Undo Stack sebelum memulihkan snapshot
+        val fullSnapshot = getFullListSnapshot(listId)
+        val undoEntity = UndoRedoEntity(
+            storeId = storeId,
+            listId = listId,
+            stackType = "UNDO",
+            stepOrder = undoStacks[key]?.size ?: 0,
+            snapshotJson = gson.toJson(fullSnapshot),
+            targetKode = redoEntity.targetKode,
+            stepperAction = redoEntity.stepperAction
+        )
+        val undoStack = undoStacks.getOrPut(key) { mutableListOf() }
+        undoStack.add(undoEntity)
+        if (undoStack.size > 10) undoStack.removeAt(0)
+
+        // Pulihkan snapshot dari Redo
+        val snapshotType = object : com.google.gson.reflect.TypeToken<Map<String, Int>>() {}.type
+        val snapshotMap: Map<String, Int> = try {
+            gson.fromJson(redoEntity.snapshotJson, snapshotType)
+        } catch (_: Exception) {
+            emptyMap()
+        }
+
+        viewModelScope.launch {
+            snapshotMap.forEach { (kode, count) ->
+                repository.updateCount(storeId, listId, kode, count)
+            }
+            persistUndoRedoStacks(storeId, listId)
+        }
+
+        lastUndoRedoEvent = UndoRedoTargetEvent(
+            targetKode = redoEntity.targetKode,
+            listId = listId,
+            stepperAction = redoEntity.stepperAction
+        )
+        updateCanUndoRedoState()
+    }
+
+    private fun persistUndoRedoStacks(storeId: String, listId: String) {
+        val key = "${storeId}_$listId"
+        val undoList = undoStacks[key].orEmpty()
+        val redoList = redoStacks[key].orEmpty()
+        val combined = mutableListOf<UndoRedoEntity>()
+
+        undoList.forEachIndexed { index, entity ->
+            combined.add(entity.copy(id = 0, stepOrder = index))
+        }
+        redoList.forEachIndexed { index, entity ->
+            combined.add(entity.copy(id = 0, stepOrder = index))
+        }
+
+        viewModelScope.launch {
+            repository.replaceUndoRedoHistoryForList(storeId, listId, combined)
         }
     }
 
     fun clearCurrentList() {
         val storeId = selectedStoreId ?: return
         val listId = selectedListId ?: return
+        val key = "${storeId}_$listId"
         lastClearedBackup = rawStoreCountEntities.filter { it.storeId == storeId && it.listId == listId }
+        undoStacks.remove(key)
+        redoStacks.remove(key)
+        updateCanUndoRedoState()
         viewModelScope.launch {
             repository.clearListCounts(storeId, listId)
         }
@@ -488,6 +712,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearAllListsInStore() {
         val storeId = selectedStoreId ?: return
         lastClearedBackup = rawStoreCountEntities.filter { it.storeId == storeId }
+        val keysToRemove = undoStacks.keys.filter { it.startsWith("${storeId}_") }
+        keysToRemove.forEach {
+            undoStacks.remove(it)
+            redoStacks.remove(it)
+        }
+        updateCanUndoRedoState()
         viewModelScope.launch {
             repository.clearStoreCounts(storeId)
         }

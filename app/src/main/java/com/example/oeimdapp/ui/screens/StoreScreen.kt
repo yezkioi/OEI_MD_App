@@ -23,16 +23,22 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FileDownload
@@ -86,6 +92,9 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -135,7 +144,133 @@ fun StoreScreen(
         }
     }
 
-    // State untuk berbagai modal dialog di layar toko
+    // State untuk berbagai modal dialog & interaksi di layar toko
+    val haptics = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val topSafePx = with(density) { 80.dp.toPx() }
+    val bottomSafePx = with(density) { 110.dp.toPx() }
+
+    val gridState = rememberLazyGridState()
+    var lastPressedStepperId by remember { mutableStateOf<String?>(null) }
+
+    val lastUndoRedoEvent = viewModel.lastUndoRedoEvent
+    LaunchedEffect(lastUndoRedoEvent?.eventId) {
+        val event = lastUndoRedoEvent ?: return@LaunchedEffect
+        val targetKode = event.targetKode
+        val targetListId = event.listId
+        val action = event.stepperAction
+
+        lastPressedStepperId = if (action.isNotBlank()) {
+            "${targetListId}_${targetKode}_$action"
+        } else {
+            null
+        }
+
+        if (viewModel.selectedListId != targetListId) {
+            viewModel.selectList(targetListId)
+        }
+
+        val currentStoreLists = viewModel.getListsForStore(store)
+        val activeList = currentStoreLists.find { it.id == targetListId } ?: return@LaunchedEffect
+
+        val targetOrientation = if (activeList.pisahOrientasi) {
+            when (targetKode) {
+                "000-V" -> "Vertical"
+                "000-H" -> "Horizontal"
+                else -> {
+                    val item = activeList.items.find { it.kode == targetKode }
+                    item?.orientasi ?: viewModel.selectedOrientation
+                }
+            }
+        } else {
+            "Vertical"
+        }
+
+        if (!viewModel.selectedOrientation.equals(targetOrientation, ignoreCase = true)) {
+            viewModel.selectOrientation(targetOrientation)
+            delay(180L) // Waktu tunggu render tab orientasi baru
+        } else {
+            delay(50L)
+        }
+
+        val visibleItems = if (activeList.pisahOrientasi) {
+            activeList.items.filter { it.orientasi.equals(targetOrientation, ignoreCase = true) }
+        } else {
+            activeList.items
+        }
+
+        val targetIndex = if (targetKode == "000" || targetKode == "000-V" || targetKode == "000-H") {
+            visibleItems.size
+        } else {
+            val foundIdx = visibleItems.indexOfFirst { it.kode == targetKode }
+            if (foundIdx >= 0) foundIdx else 0
+        }
+
+        val layoutInfo = gridState.layoutInfo
+        val viewportHeight = layoutInfo.viewportEndOffset.toFloat()
+        val targetItemInfo = layoutInfo.visibleItemsInfo.find { it.index == targetIndex }
+
+        if (targetItemInfo != null) {
+            val itemTop = targetItemInfo.offset.y.toFloat()
+            val itemHeight = targetItemInfo.size.height.toFloat()
+            val itemBottom = itemTop + itemHeight
+
+            val isFullyVisible = itemTop >= topSafePx && itemBottom <= (viewportHeight - bottomSafePx)
+            if (!isFullyVisible) {
+                val delta = when {
+                    itemTop < topSafePx -> itemTop - topSafePx
+                    else -> itemBottom - (viewportHeight - bottomSafePx)
+                }
+                if (kotlin.math.abs(delta) > 5f) {
+                    gridState.animateScrollBy(
+                        value = delta,
+                        animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing)
+                    )
+                }
+            }
+        } else {
+            // Estimasi jarak piksel untuk item off-screen agar meluncur mulus
+            val currentFirst = gridState.firstVisibleItemIndex
+            val currentRow = currentFirst / 3
+            val targetRow = targetIndex / 3
+            val rowDiff = targetRow - currentRow
+
+            val avgItemHeight = layoutInfo.visibleItemsInfo.firstOrNull()?.size?.height?.toFloat() ?: 600f
+            val estimatedPixels = rowDiff * avgItemHeight
+
+            if (kotlin.math.abs(estimatedPixels) > 5f) {
+                gridState.animateScrollBy(
+                    value = estimatedPixels,
+                    animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing)
+                )
+            }
+
+            // Tunggu sebentar agar grid merender item yang masuk ke viewport
+            delay(80L)
+            val refreshedInfo = gridState.layoutInfo.visibleItemsInfo.find { it.index == targetIndex }
+            if (refreshedInfo != null) {
+                val itemTop = refreshedInfo.offset.y.toFloat()
+                val itemHeight = refreshedInfo.size.height.toFloat()
+                val itemBottom = itemTop + itemHeight
+
+                val isFullyVisible = itemTop >= topSafePx && itemBottom <= (viewportHeight - bottomSafePx)
+                if (!isFullyVisible) {
+                    val finalDelta = when {
+                        itemTop < topSafePx -> itemTop - topSafePx
+                        else -> itemBottom - (viewportHeight - bottomSafePx)
+                    }
+                    if (kotlin.math.abs(finalDelta) > 5f) {
+                        gridState.animateScrollBy(
+                            value = finalDelta,
+                            animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing)
+                        )
+                    }
+                }
+            }
+        }
+        viewModel.consumeUndoRedoEvent()
+    }
+
     var zoomItem by remember { mutableStateOf<ItemDto?>(null) }
     var keypadTargetItem by remember { mutableStateOf<ItemDto?>(null) }
     var isZeroCardKeypadOpen: Boolean by remember { mutableStateOf(false) }
@@ -390,6 +525,7 @@ fun StoreScreen(
                     val gridTopPadding = if (activeList.pisahOrientasi) 64.dp else 8.dp
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(3),
+                        state = gridState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
                             start = 10.dp,
@@ -406,12 +542,25 @@ fun StoreScreen(
                             contentType = { "product_stock_card" }
                         ) { item ->
                             val count = viewModel.getCount(activeList.id, item.kode)
+                            val plusId = "${activeList.id}_${item.kode}_PLUS"
+                            val minusId = "${activeList.id}_${item.kode}_MINUS"
                             ProductStockCard(
                                 item = item,
                                 pisahOrientasi = activeList.pisahOrientasi,
                                 count = count,
-                                onIncrement = { viewModel.updateItemCount(activeList.id, item.kode, count + 1) },
-                                onDecrement = { viewModel.updateItemCount(activeList.id, item.kode, count - 1) },
+                                lastPressedStepperId = lastPressedStepperId,
+                                plusId = plusId,
+                                minusId = minusId,
+                                onIncrement = {
+                                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                    lastPressedStepperId = plusId
+                                    viewModel.updateItemCount(activeList.id, item.kode, count + 1, stepperAction = "PLUS")
+                                },
+                                onDecrement = {
+                                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                    lastPressedStepperId = minusId
+                                    viewModel.updateItemCount(activeList.id, item.kode, count - 1, stepperAction = "MINUS")
+                                },
                                 onOpenKeypad = { keypadTargetItem = item },
                                 onOpenZoom = { zoomItem = item }
                             )
@@ -422,11 +571,24 @@ fun StoreScreen(
                             key = "${activeList.id}_$zeroItemKey",
                             contentType = "extra_zero_card"
                         ) {
+                            val zeroPlusId = "${activeList.id}_${zeroItemKey}_PLUS"
+                            val zeroMinusId = "${activeList.id}_${zeroItemKey}_MINUS"
                             ExtraZeroStockCard(
                                 label = zeroItemLabel,
                                 count = zeroItemCount,
-                                onIncrement = { viewModel.updateItemCount(activeList.id, zeroItemKey, zeroItemCount + 1) },
-                                onDecrement = { viewModel.updateItemCount(activeList.id, zeroItemKey, zeroItemCount - 1) },
+                                lastPressedStepperId = lastPressedStepperId,
+                                plusId = zeroPlusId,
+                                minusId = zeroMinusId,
+                                onIncrement = {
+                                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                    lastPressedStepperId = zeroPlusId
+                                    viewModel.updateItemCount(activeList.id, zeroItemKey, zeroItemCount + 1, stepperAction = "PLUS")
+                                },
+                                onDecrement = {
+                                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                    lastPressedStepperId = zeroMinusId
+                                    viewModel.updateItemCount(activeList.id, zeroItemKey, zeroItemCount - 1, stepperAction = "MINUS")
+                                },
                                 onOpenKeypad = { isZeroCardKeypadOpen = true }
                             )
                         }
@@ -495,91 +657,153 @@ fun StoreScreen(
 
 
         // ==========================================
-        // 6. WARM CRAFT FLOATING PILL DOCK (CLEAR & EXPORT XLSX)
+        // 6. WARM CRAFT FLOATING PILL DOCK (CLEAR & EXPORT XLSX + UNDO & REDO)
         // ==========================================
         if (currentList != null) {
-            Surface(
+            Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
                     .padding(horizontal = 12.dp, vertical = 12.dp),
-                shape = CircleShape,
-                color = colors.elevatedSurface,
-                border = BorderStroke(1.dp, colors.borderStrong),
-                shadowElevation = 8.dp
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.padding(6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                // Kapsul Utama: [ Clear | Export XLSX ]
+                Surface(
+                    shape = CircleShape,
+                    color = colors.elevatedSurface,
+                    border = BorderStroke(1.dp, colors.borderStrong),
+                    shadowElevation = 8.dp
                 ) {
-                    // Kiri: Tombol Kapsul Clear
-                    Box(
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(colors.subtleSurfaceAlt)
-                            .border(1.dp, colors.borderStrong, CircleShape)
-                            .clickable { isClearDialogOpen = true }
-                            .padding(horizontal = 16.dp, vertical = 11.dp),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        modifier = Modifier.padding(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        // Kiri: Tombol Kapsul Clear
+                        Box(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(colors.subtleSurfaceAlt)
+                                .border(1.dp, colors.borderStrong, CircleShape)
+                                .clickable { isClearDialogOpen = true }
+                                .padding(horizontal = 14.dp, vertical = 11.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.DeleteOutline,
-                                contentDescription = null,
-                                tint = colors.habisBorder,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text = "Clear",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.textPrimary
-                            )
-                        }
-                    }
-
-                    // Kanan: Tombol Kapsul Utama Export XLSX + Lencana Progres List
-                    Box(
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(colors.primaryAction)
-                            .clickable { onOpenExportDialog() }
-                            .padding(horizontal = 18.dp, vertical = 11.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.FileDownload,
-                                contentDescription = null,
-                                tint = colors.onPrimaryAction,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text = "Export XLSX",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.onPrimaryAction
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .background(colors.onPrimaryAction.copy(alpha = 0.18f))
-                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
+                                Icon(
+                                    imageVector = Icons.Default.DeleteOutline,
+                                    contentDescription = null,
+                                    tint = colors.habisBorder,
+                                    modifier = Modifier.size(18.dp)
+                                )
                                 Text(
-                                    text = "$filledListCount/${storeLists.size}",
-                                    style = TabularBadgeTextStyle,
-                                    color = colors.onPrimaryAction
+                                    text = "Clear",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.textPrimary
                                 )
                             }
                         }
+
+                        // Kanan: Tombol Kapsul Utama Export XLSX + Lencana Progres List
+                        Box(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(colors.primaryAction)
+                                .clickable { onOpenExportDialog() }
+                                .padding(horizontal = 16.dp, vertical = 11.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FileDownload,
+                                    contentDescription = null,
+                                    tint = colors.onPrimaryAction,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = "Export",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.onPrimaryAction
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(colors.onPrimaryAction.copy(alpha = 0.18f))
+                                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "$filledListCount/${storeLists.size}",
+                                        style = TabularBadgeTextStyle,
+                                        color = colors.onPrimaryAction
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Tombol Bulat Undo
+                val canUndo = viewModel.canUndo
+                Surface(
+                    shape = CircleShape,
+                    color = if (canUndo) colors.elevatedSurface else colors.subtleSurface,
+                    border = BorderStroke(1.dp, if (canUndo) colors.borderStrong else colors.border),
+                    shadowElevation = if (canUndo) 6.dp else 0.dp,
+                    modifier = Modifier.size(46.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape)
+                            .clickable(enabled = canUndo) {
+                                haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                viewModel.performUndo()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Undo,
+                            contentDescription = "Urungkan (Undo)",
+                            tint = if (canUndo) colors.textPrimary else colors.textSecondary.copy(alpha = 0.35f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                // Tombol Bulat Redo
+                val canRedo = viewModel.canRedo
+                Surface(
+                    shape = CircleShape,
+                    color = if (canRedo) colors.elevatedSurface else colors.subtleSurface,
+                    border = BorderStroke(1.dp, if (canRedo) colors.borderStrong else colors.border),
+                    shadowElevation = if (canRedo) 6.dp else 0.dp,
+                    modifier = Modifier.size(46.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape)
+                            .clickable(enabled = canRedo) {
+                                haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                viewModel.performRedo()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Redo,
+                            contentDescription = "Ulangi (Redo)",
+                            tint = if (canRedo) colors.textPrimary else colors.textSecondary.copy(alpha = 0.35f),
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
             }
@@ -817,6 +1041,9 @@ private fun ProductStockCard(
     item: ItemDto,
     pisahOrientasi: Boolean,
     count: Int,
+    lastPressedStepperId: String? = null,
+    plusId: String = "",
+    minusId: String = "",
     onIncrement: () -> Unit,
     onDecrement: () -> Unit,
     onOpenKeypad: () -> Unit,
@@ -874,6 +1101,15 @@ private fun ProductStockCard(
             counterText = colors.penuhCounterText
         }
     }
+
+    val isMinusActive = (lastPressedStepperId != null && lastPressedStepperId == minusId)
+    val isPlusActive = (lastPressedStepperId != null && lastPressedStepperId == plusId)
+
+    val effectiveMinusBg = if (isMinusActive) colors.primaryAction else stepperBtnBg
+    val effectiveMinusText = if (isMinusActive) colors.onPrimaryAction else stepperBtnText
+
+    val effectivePlusBg = if (isPlusActive) colors.primaryAction else stepperBtnBg
+    val effectivePlusText = if (isPlusActive) colors.onPrimaryAction else stepperBtnText
 
     // Poin 1: Menyatukan seluruh card produk ke rasio 1:1 yang pas dan seragam
     val imageAspectRatio = 1f
@@ -1009,11 +1245,11 @@ private fun ProductStockCard(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .background(stepperBtnBg)
+                        .background(effectiveMinusBg)
                         .clickable(onClick = onDecrement),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "−", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = stepperBtnText)
+                    Text(text = "−", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = effectiveMinusText)
                 }
 
                 Box(
@@ -1031,11 +1267,11 @@ private fun ProductStockCard(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .background(stepperBtnBg)
+                        .background(effectivePlusBg)
                         .clickable(onClick = onIncrement),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "+", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = stepperBtnText)
+                    Text(text = "+", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = effectivePlusText)
                 }
             }
         }
@@ -1049,12 +1285,24 @@ private fun ProductStockCard(
 private fun ExtraZeroStockCard(
     label: String,
     count: Int,
+    lastPressedStepperId: String? = null,
+    plusId: String = "",
+    minusId: String = "",
     onIncrement: () -> Unit,
     onDecrement: () -> Unit,
     onOpenKeypad: () -> Unit
 ) {
     val colors = OeiTheme.colors
     val dashedBorderColor = colors.zeroCardBorder
+
+    val isMinusActive = (lastPressedStepperId != null && lastPressedStepperId == minusId)
+    val isPlusActive = (lastPressedStepperId != null && lastPressedStepperId == plusId)
+
+    val effectiveMinusBg = if (isMinusActive) colors.primaryAction else colors.subtleSurfaceAlt
+    val effectiveMinusText = if (isMinusActive) colors.onPrimaryAction else colors.textPrimary
+
+    val effectivePlusBg = if (isPlusActive) colors.primaryAction else colors.subtleSurfaceAlt
+    val effectivePlusText = if (isPlusActive) colors.onPrimaryAction else colors.textPrimary
 
     Box(
         modifier = Modifier
@@ -1140,11 +1388,11 @@ private fun ExtraZeroStockCard(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .background(colors.subtleSurfaceAlt)
+                        .background(effectiveMinusBg)
                         .clickable(onClick = onDecrement),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "−", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                    Text(text = "−", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = effectiveMinusText)
                 }
 
                 Box(
@@ -1162,11 +1410,11 @@ private fun ExtraZeroStockCard(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .background(colors.subtleSurfaceAlt)
+                        .background(effectivePlusBg)
                         .clickable(onClick = onIncrement),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "+", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                    Text(text = "+", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = effectivePlusText)
                 }
             }
         }
