@@ -16,8 +16,8 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -173,16 +173,14 @@ class MainActivity : ComponentActivity() {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(bottom = 16.dp),
-                                contentAlignment = Alignment.BottomCenter
+                                    .statusBarsPadding()
+                                    .padding(top = 60.dp, start = 16.dp, end = 16.dp),
+                                contentAlignment = Alignment.TopCenter
                             ) {
                                 CountdownFloatingToast(
                                     message = toastMsg,
                                     onDismiss = { viewModel.dismissGlobalToast() },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 14.dp)
-                                        .navigationBarsPadding(),
+                                    modifier = Modifier.fillMaxWidth(),
                                     durationMs = 5000L,
                                     backgroundColor = bg,
                                     textColor = textCol,
