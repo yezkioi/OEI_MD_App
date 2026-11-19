@@ -13,8 +13,8 @@ android {
         applicationId = "com.example.oeimdapp"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "V0.2-beta"
+        versionCode = 4
+        versionName = "V0.2.1-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
