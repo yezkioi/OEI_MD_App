@@ -2,6 +2,7 @@ package com.example.oeimdapp.viewmodel
 
 import android.app.Application
 import android.content.Context
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -19,6 +20,9 @@ import com.example.oeimdapp.data.model.StoreDto
 import com.example.oeimdapp.data.prefs.SettingPreferences
 import com.example.oeimdapp.data.remote.RetrofitClient
 import com.example.oeimdapp.data.repository.OeiRepository
+import com.example.oeimdapp.export.ImportedRow
+import com.example.oeimdapp.export.ImportedTable
+import com.example.oeimdapp.export.XlsxImporter
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -729,6 +733,103 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         lastClearedBackup = emptyList()
         viewModelScope.launch {
             repository.restoreCounts(backup)
+        }
+    }
+
+    fun importXlsxData(context: Context, uri: Uri) {
+        viewModelScope.launch {
+            val importedReport = XlsxImporter.parseXlsx(context, uri)
+            if (importedReport == null) {
+                showGlobalToast("File tidak cocok", ToastType.ERROR)
+                return@launch
+            }
+
+            val currentSync = syncData
+            if (currentSync == null || currentSync.stores.isEmpty() || currentSync.lists.isEmpty()) {
+                showGlobalToast("File tidak cocok", ToastType.ERROR)
+                return@launch
+            }
+
+            // Find matching store
+            val targetStore = currentSync.stores.find {
+                it.nama.equals(importedReport.storeName.trim(), ignoreCase = true)
+            }
+            if (targetStore == null) {
+                showGlobalToast("File tidak cocok", ToastType.ERROR)
+                return@launch
+            }
+
+            val storeId = targetStore.id
+            val storeListMap = currentSync.lists
+            val storeListIds = targetStore.listIds
+
+            val importedTables = importedReport.tables
+            if (importedTables.isEmpty()) {
+                showGlobalToast("File tidak cocok", ToastType.ERROR)
+                return@launch
+            }
+
+            // Group tables by matched ListDetailDto
+            val listTablesMap = mutableMapOf<ListDetailDto, MutableList<ImportedTable>>()
+            val matchedListIds = mutableSetOf<String>()
+
+            for (table in importedTables) {
+                val titleClean = table.title.substringBefore("·").trim()
+                val foundList = storeListIds.mapNotNull { storeListMap[it] }.find { listDetail ->
+                    listDetail.nama.equals(titleClean, ignoreCase = true) ||
+                    listDetail.jenisAlias.equals(titleClean, ignoreCase = true)
+                }
+
+                if (foundList != null) {
+                    matchedListIds.add(foundList.id)
+                    listTablesMap.getOrPut(foundList) { mutableListOf() }.add(table)
+                }
+            }
+
+            if (matchedListIds.isEmpty()) {
+                showGlobalToast("File tidak cocok", ToastType.ERROR)
+                return@launch
+            }
+
+            // 1. Selective Reset: clear counts only for matched lists in this store
+            for (listId in matchedListIds) {
+                repository.clearListCounts(storeId, listId)
+            }
+
+            // 2. Import data into lists
+            for ((listDetail, tables) in listTablesMap) {
+                val listId = listDetail.id
+
+                for (table in tables) {
+                    val tableTitleUpper = table.title.uppercase(Locale.getDefault())
+                    val isHorizontalTable = tableTitleUpper.contains("HORIZONTAL")
+
+                    for (row in table.rows) {
+                        val label = row.labelOrCode.trim()
+                        val count = row.counted
+
+                        val kode = if (label.contains("-000") || label.endsWith("000") || label.contains("000")) {
+                            when {
+                                listDetail.pisahOrientasi -> {
+                                    if (isHorizontalTable) "000-H" else "000-V"
+                                }
+                                else -> "000"
+                            }
+                        } else {
+                            val matchingItem = listDetail.items.find { 
+                                it.label.equals(label, ignoreCase = true) || it.kode.equals(label, ignoreCase = true) 
+                            }
+                            matchingItem?.kode ?: continue
+                        }
+
+                        repository.updateCount(storeId, listId, kode, count)
+                    }
+                }
+            }
+
+            val uniqueListCount = matchedListIds.size
+            val successMsg = "$uniqueListCount list berhasil diimport ke toko ${targetStore.nama}"
+            showGlobalToast(successMsg, ToastType.SUCCESS)
         }
     }
 

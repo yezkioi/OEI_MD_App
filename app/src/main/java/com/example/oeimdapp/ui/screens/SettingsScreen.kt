@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -86,6 +87,14 @@ fun SettingsScreen(
     var urlInput by rememberSaveable { mutableStateOf(viewModel.webAppUrl) }
     var tokenInput by rememberSaveable { mutableStateOf(viewModel.appToken) }
     var isTokenVisible by rememberSaveable { mutableStateOf(false) }
+
+    val filePickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.importXlsxData(context, uri)
+        }
+    }
 
     // Clipboard management for smart instant paste
     var clipboardText by remember { mutableStateOf("") }
@@ -310,7 +319,17 @@ fun SettingsScreen(
                             placeholder = { Text("Contoh: Budi") },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(
+                                onDone = {
+                                    if (mdNameInput.trim().equals("!import", ignoreCase = true)) {
+                                        mdNameInput = viewModel.mdName
+                                        filePickerLauncher.launch(arrayOf("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/octet-stream"))
+                                    } else {
+                                        viewModel.saveSettings(mdNameInput, urlInput, tokenInput)
+                                    }
+                                }
+                            ),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = colors.primaryAction,
                                 unfocusedBorderColor = colors.borderStrong,
