@@ -208,7 +208,6 @@ object XlsxExporter {
                     }
                 }
             } else {
-                val zeroCount = listCounts["000"] ?: 0
                 if (applyBsFilter) {
                     if (itemsToProcess.isNotEmpty()) {
                         val rows = itemsToProcess.map { item ->
@@ -225,7 +224,14 @@ object XlsxExporter {
                     val rows = itemsToProcess.map { item ->
                         toRegularRow(item.label, item.target, listCounts[item.kode] ?: 0, item.bestSeller)
                     }.toMutableList()
-                    rows.add(toZeroRow("${listDetail.jenisAlias}-000", zeroCount))
+
+                    if (listDetail.jenisNama.equals("Coaster Set", ignoreCase = true)) {
+                        rows.add(toZeroRow("COS4-000", listCounts["000-COS4"] ?: 0))
+                        rows.add(toZeroRow("COS6-000", listCounts["000-COS6"] ?: 0))
+                    } else {
+                        val zeroCount = listCounts["000"] ?: 0
+                        rows.add(toZeroRow("${listDetail.jenisAlias}-000", zeroCount))
+                    }
 
                     tables.add(
                         ExportTableSection(

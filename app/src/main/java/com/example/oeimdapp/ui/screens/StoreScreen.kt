@@ -199,11 +199,14 @@ fun StoreScreen(
             activeList.items
         }
 
-        val targetIndex = if (targetKode == "000" || targetKode == "000-V" || targetKode == "000-H") {
-            visibleItems.size
-        } else {
-            val foundIdx = visibleItems.indexOfFirst { it.kode == targetKode }
-            if (foundIdx >= 0) foundIdx else 0
+        val isCoasterSet = activeList.jenisNama.equals("Coaster Set", ignoreCase = true)
+        val targetIndex = when (targetKode) {
+            "000", "000-V", "000-H", "000-COS4" -> visibleItems.size
+            "000-COS6" -> if (isCoasterSet) visibleItems.size + 1 else visibleItems.size
+            else -> {
+                val foundIdx = visibleItems.indexOfFirst { it.kode == targetKode }
+                if (foundIdx >= 0) foundIdx else 0
+            }
         }
 
         val layoutInfo = gridState.layoutInfo
@@ -273,7 +276,7 @@ fun StoreScreen(
 
     var zoomItem by remember { mutableStateOf<ItemDto?>(null) }
     var keypadTargetItem by remember { mutableStateOf<ItemDto?>(null) }
-    var isZeroCardKeypadOpen: Boolean by remember { mutableStateOf(false) }
+    var zeroCardKeypadCode by remember { mutableStateOf<String?>(null) }
     var isClearDialogOpen: Boolean by remember { mutableStateOf(false) }
 
     fun triggerUndoSnackbar(message: String) {
@@ -567,30 +570,93 @@ fun StoreScreen(
                         }
 
                         // Kartu Khusus ALIAS-000 di posisi paling akhir grid
-                        item(
-                            key = "${activeList.id}_$zeroItemKey",
-                            contentType = "extra_zero_card"
-                        ) {
-                            val zeroPlusId = "${activeList.id}_${zeroItemKey}_PLUS"
-                            val zeroMinusId = "${activeList.id}_${zeroItemKey}_MINUS"
-                            ExtraZeroStockCard(
-                                label = zeroItemLabel,
-                                count = zeroItemCount,
-                                lastPressedStepperId = lastPressedStepperId,
-                                plusId = zeroPlusId,
-                                minusId = zeroMinusId,
-                                onIncrement = {
-                                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                    lastPressedStepperId = zeroPlusId
-                                    viewModel.updateItemCount(activeList.id, zeroItemKey, zeroItemCount + 1, stepperAction = "PLUS")
-                                },
-                                onDecrement = {
-                                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                    lastPressedStepperId = zeroMinusId
-                                    viewModel.updateItemCount(activeList.id, zeroItemKey, zeroItemCount - 1, stepperAction = "MINUS")
-                                },
-                                onOpenKeypad = { isZeroCardKeypadOpen = true }
-                            )
+                        val isCoasterSet = activeList.jenisNama.equals("Coaster Set", ignoreCase = true)
+                        if (isCoasterSet) {
+                            val cos4Key = "000-COS4"
+                            val cos4Label = "COS4-000"
+                            val cos4Count = viewModel.getCount(activeList.id, cos4Key)
+                            val cos4PlusId = "${activeList.id}_${cos4Key}_PLUS"
+                            val cos4MinusId = "${activeList.id}_${cos4Key}_MINUS"
+
+                            item(
+                                key = "${activeList.id}_$cos4Key",
+                                contentType = "extra_zero_card"
+                            ) {
+                                ExtraZeroStockCard(
+                                    label = cos4Label,
+                                    count = cos4Count,
+                                    lastPressedStepperId = lastPressedStepperId,
+                                    plusId = cos4PlusId,
+                                    minusId = cos4MinusId,
+                                    onIncrement = {
+                                        haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                        lastPressedStepperId = cos4PlusId
+                                        viewModel.updateItemCount(activeList.id, cos4Key, cos4Count + 1, stepperAction = "PLUS")
+                                    },
+                                    onDecrement = {
+                                        haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                        lastPressedStepperId = cos4MinusId
+                                        viewModel.updateItemCount(activeList.id, cos4Key, cos4Count - 1, stepperAction = "MINUS")
+                                    },
+                                    onOpenKeypad = { zeroCardKeypadCode = cos4Key }
+                                )
+                            }
+
+                            val cos6Key = "000-COS6"
+                            val cos6Label = "COS6-000"
+                            val cos6Count = viewModel.getCount(activeList.id, cos6Key)
+                            val cos6PlusId = "${activeList.id}_${cos6Key}_PLUS"
+                            val cos6MinusId = "${activeList.id}_${cos6Key}_MINUS"
+
+                            item(
+                                key = "${activeList.id}_$cos6Key",
+                                contentType = "extra_zero_card"
+                            ) {
+                                ExtraZeroStockCard(
+                                    label = cos6Label,
+                                    count = cos6Count,
+                                    lastPressedStepperId = lastPressedStepperId,
+                                    plusId = cos6PlusId,
+                                    minusId = cos6MinusId,
+                                    onIncrement = {
+                                        haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                        lastPressedStepperId = cos6PlusId
+                                        viewModel.updateItemCount(activeList.id, cos6Key, cos6Count + 1, stepperAction = "PLUS")
+                                    },
+                                    onDecrement = {
+                                        haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                        lastPressedStepperId = cos6MinusId
+                                        viewModel.updateItemCount(activeList.id, cos6Key, cos6Count - 1, stepperAction = "MINUS")
+                                    },
+                                    onOpenKeypad = { zeroCardKeypadCode = cos6Key }
+                                )
+                            }
+                        } else {
+                            item(
+                                key = "${activeList.id}_$zeroItemKey",
+                                contentType = "extra_zero_card"
+                            ) {
+                                val zeroPlusId = "${activeList.id}_${zeroItemKey}_PLUS"
+                                val zeroMinusId = "${activeList.id}_${zeroItemKey}_MINUS"
+                                ExtraZeroStockCard(
+                                    label = zeroItemLabel,
+                                    count = zeroItemCount,
+                                    lastPressedStepperId = lastPressedStepperId,
+                                    plusId = zeroPlusId,
+                                    minusId = zeroMinusId,
+                                    onIncrement = {
+                                        haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                        lastPressedStepperId = zeroPlusId
+                                        viewModel.updateItemCount(activeList.id, zeroItemKey, zeroItemCount + 1, stepperAction = "PLUS")
+                                    },
+                                    onDecrement = {
+                                        haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                        lastPressedStepperId = zeroMinusId
+                                        viewModel.updateItemCount(activeList.id, zeroItemKey, zeroItemCount - 1, stepperAction = "MINUS")
+                                    },
+                                    onOpenKeypad = { zeroCardKeypadCode = zeroItemKey }
+                                )
+                            }
                         }
                     }
                 }
@@ -929,22 +995,22 @@ fun StoreScreen(
         }
 
         // 3. Modal Numeric Keypad untuk Kartu ALIAS-000
-        if (isZeroCardKeypadOpen) {
-            val zeroKey = if (activeList.pisahOrientasi) {
-                if (viewModel.selectedOrientation.equals("Horizontal", ignoreCase = true)) "000-H"
-                else "000-V"
-            } else {
-                "000"
+        val zCode = zeroCardKeypadCode
+        if (zCode != null) {
+            val zLabel = when (zCode) {
+                "000-COS4" -> "COS4-000"
+                "000-COS6" -> "COS6-000"
+                else -> "${activeList.jenisAlias}-000"
             }
-            val liveZeroCount = viewModel.getCount(activeList.id, zeroKey)
+            val liveZeroCount = viewModel.getCount(activeList.id, zCode)
             NumericKeypadDialog(
-                itemLabel = "${activeList.jenisAlias}-000",
+                itemLabel = zLabel,
                 target = null,
                 initialValue = liveZeroCount,
-                onDismiss = { isZeroCardKeypadOpen = false },
+                onDismiss = { zeroCardKeypadCode = null },
                 onConfirm = { newVal: Int ->
-                    viewModel.updateItemCount(activeList.id, zeroKey, newVal)
-                    isZeroCardKeypadOpen = false
+                    viewModel.updateItemCount(activeList.id, zCode, newVal)
+                    zeroCardKeypadCode = null
                 }
             )
         }

@@ -810,6 +810,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                         val kode = if (label.contains("-000") || label.endsWith("000") || label.contains("000")) {
                             when {
+                                listDetail.jenisNama.equals("Coaster Set", ignoreCase = true) -> {
+                                    if (label.contains("COS6", ignoreCase = true) || label.equals("COS6-000", ignoreCase = true)) "000-COS6"
+                                    else "000-COS4"
+                                }
                                 listDetail.pisahOrientasi -> {
                                     if (isHorizontalTable) "000-H" else "000-V"
                                 }
