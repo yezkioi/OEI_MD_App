@@ -112,6 +112,77 @@ import com.example.oeimdapp.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+sealed class GridDisplayElement {
+    data class Product(val item: ItemDto) : GridDisplayElement()
+    data class EmptySlot(val slotNumber: Int) : GridDisplayElement()
+    data class ExtraZero(val key: String, val label: String) : GridDisplayElement()
+}
+
+private fun buildDisplayElements(activeList: ListDetailDto, activeOrientation: String): List<GridDisplayElement> {
+    val visibleItems = if (activeList.pisahOrientasi) {
+        activeList.items.filter { it.orientasi.equals(activeOrientation, ignoreCase = true) }
+    } else {
+        activeList.items
+    }
+
+    val isCarousel = activeList.tipe.equals("Carousel", ignoreCase = true)
+    val hasPosisi = visibleItems.any { (it.posisi ?: 0) > 0 }
+    val isCompact4Col = isCarousel && hasPosisi
+
+    val elements = mutableListOf<GridDisplayElement>()
+
+    if (isCompact4Col) {
+        val validPosItems = mutableListOf<ItemDto>()
+        val unassignedItems = mutableListOf<ItemDto>()
+        val placedPositions = mutableSetOf<Int>()
+
+        for (item in visibleItems) {
+            val pos = item.posisi ?: 0
+            if (pos > 0 && !placedPositions.contains(pos)) {
+                placedPositions.add(pos)
+                validPosItems.add(item)
+            } else {
+                unassignedItems.add(item)
+            }
+        }
+
+        val maxPosisi = validPosItems.maxOfOrNull { it.posisi ?: 0 } ?: 0
+
+        for (slotNum in 1..maxPosisi) {
+            val foundItem = validPosItems.find { it.posisi == slotNum }
+            if (foundItem != null) {
+                elements.add(GridDisplayElement.Product(foundItem))
+            } else {
+                elements.add(GridDisplayElement.EmptySlot(slotNum))
+            }
+        }
+
+        for (item in unassignedItems) {
+            elements.add(GridDisplayElement.Product(item))
+        }
+    } else {
+        for (item in visibleItems) {
+            elements.add(GridDisplayElement.Product(item))
+        }
+    }
+
+    val isCoasterSet = activeList.jenisNama.equals("Coaster Set", ignoreCase = true)
+    if (isCoasterSet) {
+        elements.add(GridDisplayElement.ExtraZero("000-COS4", "COS4-000"))
+        elements.add(GridDisplayElement.ExtraZero("000-COS6", "COS6-000"))
+    } else {
+        val zeroKey = if (activeList.pisahOrientasi) {
+            if (activeOrientation.equals("Horizontal", ignoreCase = true)) "000-H" else "000-V"
+        } else {
+            "000"
+        }
+        val zeroLabel = "${activeList.jenisAlias}-000"
+        elements.add(GridDisplayElement.ExtraZero(zeroKey, zeroLabel))
+    }
+
+    return elements
+}
+
 @Composable
 fun StoreScreen(
     viewModel: MainViewModel,
@@ -193,21 +264,23 @@ fun StoreScreen(
             delay(50L)
         }
 
+        val displayElements = buildDisplayElements(activeList, targetOrientation)
+        val targetIndex = displayElements.indexOfFirst { element ->
+            when (element) {
+                is GridDisplayElement.Product -> element.item.kode == targetKode
+                is GridDisplayElement.EmptySlot -> false
+                is GridDisplayElement.ExtraZero -> element.key == targetKode
+            }
+        }.let { if (it >= 0) it else 0 }
+
+        val isCarousel = activeList.tipe.equals("Carousel", ignoreCase = true)
         val visibleItems = if (activeList.pisahOrientasi) {
             activeList.items.filter { it.orientasi.equals(targetOrientation, ignoreCase = true) }
         } else {
             activeList.items
         }
-
-        val isCoasterSet = activeList.jenisNama.equals("Coaster Set", ignoreCase = true)
-        val targetIndex = when (targetKode) {
-            "000", "000-V", "000-H", "000-COS4" -> visibleItems.size
-            "000-COS6" -> if (isCoasterSet) visibleItems.size + 1 else visibleItems.size
-            else -> {
-                val foundIdx = visibleItems.indexOfFirst { it.kode == targetKode }
-                if (foundIdx >= 0) foundIdx else 0
-            }
-        }
+        val hasPosisi = visibleItems.any { (it.posisi ?: 0) > 0 }
+        val gridColumns = if (isCarousel && hasPosisi) 4 else 3
 
         val layoutInfo = gridState.layoutInfo
         val viewportHeight = layoutInfo.viewportEndOffset.toFloat()
@@ -234,8 +307,8 @@ fun StoreScreen(
         } else {
             // Estimasi jarak piksel untuk item off-screen agar meluncur mulus
             val currentFirst = gridState.firstVisibleItemIndex
-            val currentRow = currentFirst / 3
-            val targetRow = targetIndex / 3
+            val currentRow = currentFirst / gridColumns
+            val targetRow = targetIndex / gridColumns
             val rowDiff = targetRow - currentRow
 
             val avgItemHeight = layoutInfo.visibleItemsInfo.firstOrNull()?.size?.height?.toFloat() ?: 600f
@@ -514,20 +587,18 @@ fun StoreScreen(
                         }
                     }
 
-                    val zeroItemKey = remember(activeList.id, activeList.pisahOrientasi, activeOrientation) {
-                        if (activeList.pisahOrientasi) {
-                            if (activeOrientation.equals("Horizontal", ignoreCase = true)) "000-H"
-                            else "000-V"
-                        } else {
-                            "000"
-                        }
+                    val isCarousel = activeList.tipe.equals("Carousel", ignoreCase = true)
+                    val hasPosisi = remember(visibleItems) { visibleItems.any { (it.posisi ?: 0) > 0 } }
+                    val isCompact4Col = isCarousel && hasPosisi
+                    val gridColumns = if (isCompact4Col) 4 else 3
+
+                    val displayElements = remember(activeList, activeOrientation, visibleItems) {
+                        buildDisplayElements(activeList, activeOrientation)
                     }
-                    val zeroItemLabel = "${activeList.jenisAlias}-000"
-                    val zeroItemCount = viewModel.getCount(activeList.id, zeroItemKey)
 
                     val gridTopPadding = if (activeList.pisahOrientasi) 64.dp else 8.dp
                     LazyVerticalGrid(
-                        columns = GridCells.Fixed(3),
+                        columns = GridCells.Fixed(gridColumns),
                         state = gridState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
@@ -536,126 +607,84 @@ fun StoreScreen(
                             top = gridTopPadding,
                             bottom = 96.dp
                         ),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(if (isCompact4Col) 6.dp else 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(if (isCompact4Col) 8.dp else 10.dp)
                     ) {
                         items(
-                            items = visibleItems,
-                            key = { "${activeList.id}_${it.kode}" },
-                            contentType = { "product_stock_card" }
-                        ) { item ->
-                            val count = viewModel.getCount(activeList.id, item.kode)
-                            val plusId = "${activeList.id}_${item.kode}_PLUS"
-                            val minusId = "${activeList.id}_${item.kode}_MINUS"
-                            ProductStockCard(
-                                item = item,
-                                pisahOrientasi = activeList.pisahOrientasi,
-                                count = count,
-                                lastPressedStepperId = lastPressedStepperId,
-                                plusId = plusId,
-                                minusId = minusId,
-                                onIncrement = {
-                                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                    lastPressedStepperId = plusId
-                                    viewModel.updateItemCount(activeList.id, item.kode, count + 1, stepperAction = "PLUS")
-                                },
-                                onDecrement = {
-                                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                    lastPressedStepperId = minusId
-                                    viewModel.updateItemCount(activeList.id, item.kode, count - 1, stepperAction = "MINUS")
-                                },
-                                onOpenKeypad = { keypadTargetItem = item },
-                                onOpenZoom = { zoomItem = item }
-                            )
-                        }
-
-                        // Kartu Khusus ALIAS-000 di posisi paling akhir grid
-                        val isCoasterSet = activeList.jenisNama.equals("Coaster Set", ignoreCase = true)
-                        if (isCoasterSet) {
-                            val cos4Key = "000-COS4"
-                            val cos4Label = "COS4-000"
-                            val cos4Count = viewModel.getCount(activeList.id, cos4Key)
-                            val cos4PlusId = "${activeList.id}_${cos4Key}_PLUS"
-                            val cos4MinusId = "${activeList.id}_${cos4Key}_MINUS"
-
-                            item(
-                                key = "${activeList.id}_$cos4Key",
-                                contentType = "extra_zero_card"
-                            ) {
-                                ExtraZeroStockCard(
-                                    label = cos4Label,
-                                    count = cos4Count,
-                                    lastPressedStepperId = lastPressedStepperId,
-                                    plusId = cos4PlusId,
-                                    minusId = cos4MinusId,
-                                    onIncrement = {
-                                        haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                        lastPressedStepperId = cos4PlusId
-                                        viewModel.updateItemCount(activeList.id, cos4Key, cos4Count + 1, stepperAction = "PLUS")
-                                    },
-                                    onDecrement = {
-                                        haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                        lastPressedStepperId = cos4MinusId
-                                        viewModel.updateItemCount(activeList.id, cos4Key, cos4Count - 1, stepperAction = "MINUS")
-                                    },
-                                    onOpenKeypad = { zeroCardKeypadCode = cos4Key }
-                                )
+                            items = displayElements,
+                            key = { element ->
+                                when (element) {
+                                    is GridDisplayElement.Product -> "${activeList.id}_${element.item.kode}"
+                                    is GridDisplayElement.EmptySlot -> "${activeList.id}_empty_slot_${element.slotNumber}"
+                                    is GridDisplayElement.ExtraZero -> "${activeList.id}_${element.key}"
+                                }
+                            },
+                            contentType = { element ->
+                                when (element) {
+                                    is GridDisplayElement.Product -> "product_stock_card"
+                                    is GridDisplayElement.EmptySlot -> "empty_slot_card"
+                                    is GridDisplayElement.ExtraZero -> "extra_zero_card"
+                                }
                             }
+                        ) { element ->
+                            when (element) {
+                                is GridDisplayElement.Product -> {
+                                    val item = element.item
+                                    val count = viewModel.getCount(activeList.id, item.kode)
+                                    val plusId = "${activeList.id}_${item.kode}_PLUS"
+                                    val minusId = "${activeList.id}_${item.kode}_MINUS"
+                                    ProductStockCard(
+                                        item = item,
+                                        pisahOrientasi = activeList.pisahOrientasi,
+                                        count = count,
+                                        isCompact4Col = isCompact4Col,
+                                        lastPressedStepperId = lastPressedStepperId,
+                                        plusId = plusId,
+                                        minusId = minusId,
+                                        onIncrement = {
+                                            haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                            lastPressedStepperId = plusId
+                                            viewModel.updateItemCount(activeList.id, item.kode, count + 1, stepperAction = "PLUS")
+                                        },
+                                        onDecrement = {
+                                            haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                            lastPressedStepperId = minusId
+                                            viewModel.updateItemCount(activeList.id, item.kode, count - 1, stepperAction = "MINUS")
+                                        },
+                                        onOpenKeypad = { keypadTargetItem = item },
+                                        onOpenZoom = { zoomItem = item }
+                                    )
+                                }
+                                is GridDisplayElement.EmptySlot -> {
+                                    EmptyCarouselSlotCard(isCompact4Col = isCompact4Col)
+                                }
+                                is GridDisplayElement.ExtraZero -> {
+                                    val zeroKey = element.key
+                                    val zeroLabel = element.label
+                                    val zeroCount = viewModel.getCount(activeList.id, zeroKey)
+                                    val zeroPlusId = "${activeList.id}_${zeroKey}_PLUS"
+                                    val zeroMinusId = "${activeList.id}_${zeroKey}_MINUS"
 
-                            val cos6Key = "000-COS6"
-                            val cos6Label = "COS6-000"
-                            val cos6Count = viewModel.getCount(activeList.id, cos6Key)
-                            val cos6PlusId = "${activeList.id}_${cos6Key}_PLUS"
-                            val cos6MinusId = "${activeList.id}_${cos6Key}_MINUS"
-
-                            item(
-                                key = "${activeList.id}_$cos6Key",
-                                contentType = "extra_zero_card"
-                            ) {
-                                ExtraZeroStockCard(
-                                    label = cos6Label,
-                                    count = cos6Count,
-                                    lastPressedStepperId = lastPressedStepperId,
-                                    plusId = cos6PlusId,
-                                    minusId = cos6MinusId,
-                                    onIncrement = {
-                                        haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                        lastPressedStepperId = cos6PlusId
-                                        viewModel.updateItemCount(activeList.id, cos6Key, cos6Count + 1, stepperAction = "PLUS")
-                                    },
-                                    onDecrement = {
-                                        haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                        lastPressedStepperId = cos6MinusId
-                                        viewModel.updateItemCount(activeList.id, cos6Key, cos6Count - 1, stepperAction = "MINUS")
-                                    },
-                                    onOpenKeypad = { zeroCardKeypadCode = cos6Key }
-                                )
-                            }
-                        } else {
-                            item(
-                                key = "${activeList.id}_$zeroItemKey",
-                                contentType = "extra_zero_card"
-                            ) {
-                                val zeroPlusId = "${activeList.id}_${zeroItemKey}_PLUS"
-                                val zeroMinusId = "${activeList.id}_${zeroItemKey}_MINUS"
-                                ExtraZeroStockCard(
-                                    label = zeroItemLabel,
-                                    count = zeroItemCount,
-                                    lastPressedStepperId = lastPressedStepperId,
-                                    plusId = zeroPlusId,
-                                    minusId = zeroMinusId,
-                                    onIncrement = {
-                                        haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                        lastPressedStepperId = zeroPlusId
-                                        viewModel.updateItemCount(activeList.id, zeroItemKey, zeroItemCount + 1, stepperAction = "PLUS")
-                                    },
-                                    onDecrement = {
-                                        haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                        lastPressedStepperId = zeroMinusId
-                                        viewModel.updateItemCount(activeList.id, zeroItemKey, zeroItemCount - 1, stepperAction = "MINUS")
-                                    },
-                                    onOpenKeypad = { zeroCardKeypadCode = zeroItemKey }
-                                )
+                                    ExtraZeroStockCard(
+                                        label = zeroLabel,
+                                        count = zeroCount,
+                                        isCompact4Col = isCompact4Col,
+                                        lastPressedStepperId = lastPressedStepperId,
+                                        plusId = zeroPlusId,
+                                        minusId = zeroMinusId,
+                                        onIncrement = {
+                                            haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                            lastPressedStepperId = zeroPlusId
+                                            viewModel.updateItemCount(activeList.id, zeroKey, zeroCount + 1, stepperAction = "PLUS")
+                                        },
+                                        onDecrement = {
+                                            haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                            lastPressedStepperId = zeroMinusId
+                                            viewModel.updateItemCount(activeList.id, zeroKey, zeroCount - 1, stepperAction = "MINUS")
+                                        },
+                                        onOpenKeypad = { zeroCardKeypadCode = zeroKey }
+                                    )
+                                }
                             }
                         }
                     }
@@ -1100,6 +1129,54 @@ private fun ListPillButton(
 }
 
 // ==========================================
+// KARTU KOSONG POLOS CAROUSEL ([card-kosongpolos])
+// ==========================================
+@Composable
+private fun EmptyCarouselSlotCard(isCompact4Col: Boolean) {
+    val colors = OeiTheme.colors
+    val verticalPadding = if (isCompact4Col) 2.dp else 5.dp
+    val spacerHeight = if (isCompact4Col) 4.dp else 6.dp
+    val stepperHeight = if (isCompact4Col) 28.dp else 36.dp
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = colors.subtleSurface.copy(alpha = 0.4f),
+        border = BorderStroke(1.dp, colors.border.copy(alpha = 0.5f))
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .background(colors.subtleSurface.copy(alpha = 0.2f))
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = if (isCompact4Col) 4.dp else 6.dp, vertical = verticalPadding)
+                    .height(if (isCompact4Col) 13.dp else 16.dp)
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = if (isCompact4Col) 4.dp else 6.dp)
+                    .height(if (isCompact4Col) 14.dp else 18.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(colors.subtleSurface.copy(alpha = 0.2f))
+            )
+            Spacer(modifier = Modifier.height(spacerHeight))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(stepperHeight)
+                    .background(colors.subtleSurface.copy(alpha = 0.1f))
+            )
+        }
+    }
+}
+
+// ==========================================
 // KARTU PRODUK REGULER (RATIO 1:1 SERAGAM)
 // ==========================================
 @Composable
@@ -1107,6 +1184,7 @@ private fun ProductStockCard(
     item: ItemDto,
     pisahOrientasi: Boolean,
     count: Int,
+    isCompact4Col: Boolean = false,
     lastPressedStepperId: String? = null,
     plusId: String = "",
     minusId: String = "",
@@ -1117,6 +1195,17 @@ private fun ProductStockCard(
 ) {
     val colors = OeiTheme.colors
     var useFallbackUrl: Boolean by remember(item.fileId) { mutableStateOf(false) }
+
+    val metaHorizontal = if (isCompact4Col) 4.dp else 6.dp
+    val metaVertical = if (isCompact4Col) 2.dp else 5.dp
+    val codeFontSize = if (isCompact4Col) 9.5.sp else 11.sp
+    val targetFontSize = if (isCompact4Col) 8.5.sp else 10.sp
+    val badgeVertical = if (isCompact4Col) 2.dp else 3.dp
+    val badgeTextSize = if (isCompact4Col) 8.5.sp else 10.sp
+    val spacerHeight = if (isCompact4Col) 4.dp else 6.dp
+    val stepperHeight = if (isCompact4Col) 28.dp else 36.dp
+    val stepperBtnTextSize = if (isCompact4Col) 14.sp else 18.sp
+    val counterTextSize = if (isCompact4Col) 12.sp else 14.sp
 
     val borderColor: Color
     val photoBgColor: Color
@@ -1215,10 +1304,12 @@ private fun ProductStockCard(
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = item.label,
-                            style = ItemCodeTextStyle.copy(fontSize = 10.sp),
+                            style = ItemCodeTextStyle.copy(fontSize = codeFontSize),
                             color = colors.textSecondary,
                             textAlign = TextAlign.Center,
-                            maxLines = 1
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 } else {
@@ -1247,13 +1338,14 @@ private fun ProductStockCard(
                             .padding(4.dp)
                             .clip(RoundedCornerShape(6.dp))
                             .background(colors.bestBadgeBg)
-                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                            .padding(horizontal = if (isCompact4Col) 4.dp else 5.dp, vertical = if (isCompact4Col) 1.dp else 2.dp)
                     ) {
                         Text(
                             text = "★ Best",
-                            fontSize = 9.sp,
+                            fontSize = if (isCompact4Col) 8.sp else 9.sp,
                             fontWeight = FontWeight.Bold,
-                            color = colors.bestBadgeText
+                            color = colors.bestBadgeText,
+                            maxLines = 1
                         )
                     }
                 }
@@ -1262,49 +1354,51 @@ private fun ProductStockCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 6.dp, vertical = 5.dp),
+                    .padding(horizontal = metaHorizontal, vertical = metaVertical),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = item.label,
-                    style = ItemCodeTextStyle.copy(fontSize = 11.sp),
+                    style = ItemCodeTextStyle.copy(fontSize = codeFontSize),
                     color = colors.textPrimary,
                     maxLines = 1,
+                    softWrap = false,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
                 Text(
                     text = "T:${item.target}",
-                    style = TabularBadgeTextStyle.copy(fontSize = 10.sp),
-                    color = colors.textSecondary
+                    style = TabularBadgeTextStyle.copy(fontSize = targetFontSize),
+                    color = colors.textSecondary,
+                    maxLines = 1
                 )
             }
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 6.dp)
+                    .padding(horizontal = metaHorizontal)
                     .clip(RoundedCornerShape(6.dp))
                     .background(badgeBgColor)
-                    .padding(vertical = 3.dp),
+                    .padding(vertical = badgeVertical),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = statusLabel,
-                    fontSize = 10.sp,
+                    fontSize = badgeTextSize,
                     fontWeight = FontWeight.Bold,
                     color = badgeTextColor,
                     maxLines = 1
                 )
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(spacerHeight))
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(36.dp),
+                    .height(stepperHeight),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
@@ -1315,7 +1409,7 @@ private fun ProductStockCard(
                         .clickable(onClick = onDecrement),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "−", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = effectiveMinusText)
+                    Text(text = "−", fontSize = stepperBtnTextSize, fontWeight = FontWeight.Bold, color = effectiveMinusText)
                 }
 
                 Box(
@@ -1326,7 +1420,7 @@ private fun ProductStockCard(
                         .clickable(onClick = onOpenKeypad),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = count.toString(), style = TabularNumberTextStyle.copy(fontSize = 14.sp), color = counterText)
+                    Text(text = count.toString(), style = TabularNumberTextStyle.copy(fontSize = counterTextSize), color = counterText)
                 }
 
                 Box(
@@ -1337,7 +1431,7 @@ private fun ProductStockCard(
                         .clickable(onClick = onIncrement),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "+", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = effectivePlusText)
+                    Text(text = "+", fontSize = stepperBtnTextSize, fontWeight = FontWeight.Bold, color = effectivePlusText)
                 }
             }
         }
@@ -1351,6 +1445,7 @@ private fun ProductStockCard(
 private fun ExtraZeroStockCard(
     label: String,
     count: Int,
+    isCompact4Col: Boolean = false,
     lastPressedStepperId: String? = null,
     plusId: String = "",
     minusId: String = "",
@@ -1360,6 +1455,16 @@ private fun ExtraZeroStockCard(
 ) {
     val colors = OeiTheme.colors
     val dashedBorderColor = colors.zeroCardBorder
+
+    val metaHorizontal = if (isCompact4Col) 4.dp else 6.dp
+    val metaVertical = if (isCompact4Col) 2.dp else 5.dp
+    val codeFontSize = if (isCompact4Col) 9.5.sp else 11.sp
+    val badgeVertical = if (isCompact4Col) 2.dp else 3.dp
+    val badgeTextSize = if (isCompact4Col) 8.5.sp else 10.sp
+    val spacerHeight = if (isCompact4Col) 4.dp else 6.dp
+    val stepperHeight = if (isCompact4Col) 28.dp else 36.dp
+    val stepperBtnTextSize = if (isCompact4Col) 14.sp else 18.sp
+    val counterTextSize = if (isCompact4Col) 12.sp else 14.sp
 
     val isMinusActive = (lastPressedStepperId != null && lastPressedStepperId == minusId)
     val isPlusActive = (lastPressedStepperId != null && lastPressedStepperId == plusId)
@@ -1402,52 +1507,55 @@ private fun ExtraZeroStockCard(
             ) {
                 Text(
                     text = "Di luar list",
-                    fontSize = 11.sp,
+                    fontSize = codeFontSize,
                     fontWeight = FontWeight.SemiBold,
                     color = colors.textSecondary,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
                 )
             }
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 6.dp, vertical = 5.dp),
+                    .padding(horizontal = metaHorizontal, vertical = metaVertical),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = label,
-                    style = ItemCodeTextStyle.copy(fontSize = 11.sp),
+                    style = ItemCodeTextStyle.copy(fontSize = codeFontSize),
                     color = colors.textPrimary,
-                    maxLines = 1
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 6.dp)
+                    .padding(horizontal = metaHorizontal)
                     .clip(RoundedCornerShape(6.dp))
                     .background(colors.subtleSurfaceAlt)
-                    .padding(vertical = 3.dp),
+                    .padding(vertical = badgeVertical),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = "Tanpa Target",
-                    fontSize = 10.sp,
+                    fontSize = badgeTextSize,
                     fontWeight = FontWeight.SemiBold,
                     color = colors.textSecondary,
                     maxLines = 1
                 )
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(spacerHeight))
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(36.dp),
+                    .height(stepperHeight),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
@@ -1458,7 +1566,7 @@ private fun ExtraZeroStockCard(
                         .clickable(onClick = onDecrement),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "−", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = effectiveMinusText)
+                    Text(text = "−", fontSize = stepperBtnTextSize, fontWeight = FontWeight.Bold, color = effectiveMinusText)
                 }
 
                 Box(
@@ -1469,7 +1577,7 @@ private fun ExtraZeroStockCard(
                         .clickable(onClick = onOpenKeypad),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = count.toString(), style = TabularNumberTextStyle.copy(fontSize = 14.sp), color = colors.textPrimary)
+                    Text(text = count.toString(), style = TabularNumberTextStyle.copy(fontSize = counterTextSize), color = colors.textPrimary)
                 }
 
                 Box(
@@ -1480,9 +1588,11 @@ private fun ExtraZeroStockCard(
                         .clickable(onClick = onIncrement),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "+", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = effectivePlusText)
+                    Text(text = "+", fontSize = stepperBtnTextSize, fontWeight = FontWeight.Bold, color = effectivePlusText)
                 }
             }
         }
     }
 }
+
+

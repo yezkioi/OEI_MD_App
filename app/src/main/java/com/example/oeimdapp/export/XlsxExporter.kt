@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
+import com.example.oeimdapp.data.model.ItemDto
 import com.example.oeimdapp.data.model.ListDetailDto
 import com.example.oeimdapp.data.model.StoreDto
 import java.io.ByteArrayOutputStream
@@ -89,10 +90,16 @@ object XlsxExporter {
             val isMountedArtprint = listDetail.jenisNama.equals("Mounted Artprint", ignoreCase = true)
             val applyBsFilter = bestSellerOnly && isMountedArtprint
 
-            val itemsToProcess = if (applyBsFilter) {
+            val rawItems = if (applyBsFilter) {
                 listDetail.items.filter { it.bestSeller }
             } else {
                 listDetail.items
+            }
+
+            val itemsToProcess = if (listDetail.tipe.equals("Carousel", ignoreCase = true) && listDetail.items.any { (it.posisi ?: 0) > 0 }) {
+                rawItems.sortedWith(compareBy({ if ((it.posisi ?: 0) > 0) it.posisi!! else Int.MAX_VALUE }, { it.urut }))
+            } else {
+                rawItems.sortedBy { it.urut }
             }
 
             val filledRegular = itemsToProcess.count { (listCounts[it.kode] ?: 0) > 0 }
