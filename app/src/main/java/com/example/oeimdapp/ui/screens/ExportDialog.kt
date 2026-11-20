@@ -53,6 +53,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -85,15 +86,33 @@ fun ExportVerificationDialog(
         storeLists.filter { selectedListIds.contains(it.id) }
     }
 
+    val isSoleMountedArtprintWithBs = remember(selectedListIds, storeLists) {
+        if (selectedListIds.size == 1) {
+            val listId = selectedListIds.first()
+            val detail = storeLists.find { it.id == listId }
+            val isMounted = detail?.jenisNama?.equals("Mounted Artprint", ignoreCase = true) == true
+            val hasBs = detail?.items?.any { it.bestSeller } == true
+            isMounted && hasBs
+        } else {
+            false
+        }
+    }
+
+    var bestSellerOnly by remember { mutableStateOf(false) }
+    if (!isSoleMountedArtprintWithBs && bestSellerOnly) {
+        bestSellerOnly = false
+    }
+
     val reportId = remember(storeId) { viewModel.peekNextReportId() }
-    val previewData = remember(storeId, selectedStoreLists, viewModel.currentStoreCounts, viewModel.openedListIdsByStore, viewModel.mdName) {
+    val previewData = remember(storeId, selectedStoreLists, viewModel.currentStoreCounts, viewModel.openedListIdsByStore, viewModel.mdName, bestSellerOnly, isSoleMountedArtprintWithBs) {
         XlsxExporter.buildPreviewData(
             store = store,
             storeLists = selectedStoreLists,
             countsByList = viewModel.currentStoreCounts,
             openedListIds = viewModel.openedListIdsByStore[storeId].orEmpty(),
             mdName = viewModel.mdName,
-            reportId = reportId
+            reportId = reportId,
+            bestSellerOnly = if (isSoleMountedArtprintWithBs) bestSellerOnly else false
         )
     }
 
@@ -376,15 +395,52 @@ fun ExportVerificationDialog(
                                         checkmarkColor = colors.onPrimaryAction
                                     )
                                 )
+                                val isThisSoleSelected = isListChecked && selectedListIds.size == 1 && storeLists.find { it.id == selectedListIds.first() }?.id == listDetail.id
+                                val isThisMountedArtprint = listDetail.jenisNama.equals("Mounted Artprint", ignoreCase = true)
+                                val hasAnyBestSeller = listDetail.items.any { it.bestSeller }
+                                val showBsOnlyCheckbox = isThisSoleSelected && isThisMountedArtprint && hasAnyBestSeller
+
                                 Text(
                                     text = listDetail.nama,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = if (isListChecked) colors.textPrimary else colors.textSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier
                                         .weight(1f)
-                                        .padding(end = 8.dp)
+                                        .padding(horizontal = 4.dp)
                                 )
+
+                                if (showBsOnlyCheckbox) {
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(colors.subtleSurfaceAlt)
+                                            .clickable { bestSellerOnly = !bestSellerOnly }
+                                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        Checkbox(
+                                            checked = bestSellerOnly,
+                                            onCheckedChange = { bestSellerOnly = it },
+                                            colors = CheckboxDefaults.colors(
+                                                checkedColor = colors.primaryAction,
+                                                checkmarkColor = colors.onPrimaryAction
+                                            ),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Text(
+                                            text = "BS Only",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = colors.textPrimary
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                }
+
                                 Box(
                                     modifier = Modifier
                                         .clip(CircleShape)

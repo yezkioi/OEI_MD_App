@@ -69,7 +69,8 @@ object XlsxExporter {
         openedListIds: Set<String>,
         mdName: String,
         reportId: String,
-        now: Date = Date()
+        now: Date = Date(),
+        bestSellerOnly: Boolean = false
     ): ExportPreviewData {
         val dateFileStr = SimpleDateFormat("ddMMyyyy", Locale.US).format(now)
         val dateSlashStr = SimpleDateFormat("dd/MM/yyyy", Locale.US).format(now)
@@ -85,7 +86,16 @@ object XlsxExporter {
             val listCounts = countsByList[listDetail.id].orEmpty()
             val isOpened = openedListIds.contains(listDetail.id)
 
-            val filledRegular = listDetail.items.count { (listCounts[it.kode] ?: 0) > 0 }
+            val isMountedArtprint = listDetail.jenisNama.equals("Mounted Artprint", ignoreCase = true)
+            val applyBsFilter = bestSellerOnly && isMountedArtprint
+
+            val itemsToProcess = if (applyBsFilter) {
+                listDetail.items.filter { it.bestSeller }
+            } else {
+                listDetail.items
+            }
+
+            val filledRegular = itemsToProcess.count { (listCounts[it.kode] ?: 0) > 0 }
             val hasAnyCount = listCounts.values.any { it > 0 }
 
             val status = when {
@@ -100,33 +110,32 @@ object XlsxExporter {
                     listName = listDetail.nama,
                     status = status,
                     filledCount = filledRegular,
-                    totalCount = listDetail.items.size
+                    totalCount = itemsToProcess.size
                 )
             )
 
             if (listDetail.pisahOrientasi) {
-                val verticalItems = listDetail.items.filter {
+                val verticalItems = itemsToProcess.filter {
                     it.orientasi.equals("Vertical", ignoreCase = true)
                 }
-                val horizontalItems = listDetail.items.filter {
+                val horizontalItems = itemsToProcess.filter {
                     it.orientasi.equals("Horizontal", ignoreCase = true)
                 }
                 val zeroTotal = (listCounts["000-V"] ?: 0) + (listCounts["000-H"] ?: 0)
 
-                when {
-                    verticalItems.isNotEmpty() && horizontalItems.isNotEmpty() -> {
+                if (applyBsFilter) {
+                    if (verticalItems.isNotEmpty()) {
                         val vRows = verticalItems.map { item ->
                             toRegularRow(item.label, item.target, listCounts[item.kode] ?: 0, item.bestSeller)
-                        }.toMutableList()
-                        vRows.add(toZeroRow("${listDetail.jenisAlias}-000", zeroTotal))
-
+                        }
                         tables.add(
                             ExportTableSection(
                                 title = "${listDetail.nama} · Vertical",
                                 rows = vRows
                             )
                         )
-
+                    }
+                    if (horizontalItems.isNotEmpty()) {
                         val hRows = horizontalItems.map { item ->
                             toRegularRow(item.label, item.target, listCounts[item.kode] ?: 0, item.bestSeller)
                         }
@@ -137,54 +146,94 @@ object XlsxExporter {
                             )
                         )
                     }
-                    verticalItems.isNotEmpty() -> {
-                        val vRows = verticalItems.map { item ->
-                            toRegularRow(item.label, item.target, listCounts[item.kode] ?: 0, item.bestSeller)
-                        }.toMutableList()
-                        vRows.add(toZeroRow("${listDetail.jenisAlias}-000", zeroTotal))
+                } else {
+                    when {
+                        verticalItems.isNotEmpty() && horizontalItems.isNotEmpty() -> {
+                            val vRows = verticalItems.map { item ->
+                                toRegularRow(item.label, item.target, listCounts[item.kode] ?: 0, item.bestSeller)
+                            }.toMutableList()
+                            vRows.add(toZeroRow("${listDetail.jenisAlias}-000", zeroTotal))
 
-                        tables.add(
-                            ExportTableSection(
-                                title = "${listDetail.nama} · Vertical",
-                                rows = vRows
+                            tables.add(
+                                ExportTableSection(
+                                    title = "${listDetail.nama} · Vertical",
+                                    rows = vRows
+                                )
                             )
-                        )
-                    }
-                    horizontalItems.isNotEmpty() -> {
-                        val hRows = horizontalItems.map { item ->
-                            toRegularRow(item.label, item.target, listCounts[item.kode] ?: 0, item.bestSeller)
-                        }.toMutableList()
-                        hRows.add(toZeroRow("${listDetail.jenisAlias}-000", zeroTotal))
 
-                        tables.add(
-                            ExportTableSection(
-                                title = "${listDetail.nama} · Horizontal",
-                                rows = hRows
+                            val hRows = horizontalItems.map { item ->
+                                toRegularRow(item.label, item.target, listCounts[item.kode] ?: 0, item.bestSeller)
+                            }
+                            tables.add(
+                                ExportTableSection(
+                                    title = "${listDetail.nama} · Horizontal",
+                                    rows = hRows
+                                )
                             )
-                        )
-                    }
-                    else -> {
-                        tables.add(
-                            ExportTableSection(
-                                title = listDetail.nama,
-                                rows = listOf(toZeroRow("${listDetail.jenisAlias}-000", zeroTotal))
+                        }
+                        verticalItems.isNotEmpty() -> {
+                            val vRows = verticalItems.map { item ->
+                                toRegularRow(item.label, item.target, listCounts[item.kode] ?: 0, item.bestSeller)
+                            }.toMutableList()
+                            vRows.add(toZeroRow("${listDetail.jenisAlias}-000", zeroTotal))
+
+                            tables.add(
+                                ExportTableSection(
+                                    title = "${listDetail.nama} · Vertical",
+                                    rows = vRows
+                                )
                             )
-                        )
+                        }
+                        horizontalItems.isNotEmpty() -> {
+                            val hRows = horizontalItems.map { item ->
+                                toRegularRow(item.label, item.target, listCounts[item.kode] ?: 0, item.bestSeller)
+                            }.toMutableList()
+                            hRows.add(toZeroRow("${listDetail.jenisAlias}-000", zeroTotal))
+
+                            tables.add(
+                                ExportTableSection(
+                                    title = "${listDetail.nama} · Horizontal",
+                                    rows = hRows
+                                )
+                            )
+                        }
+                        else -> {
+                            tables.add(
+                                ExportTableSection(
+                                    title = listDetail.nama,
+                                    rows = listOf(toZeroRow("${listDetail.jenisAlias}-000", zeroTotal))
+                                )
+                            )
+                        }
                     }
                 }
             } else {
                 val zeroCount = listCounts["000"] ?: 0
-                val rows = listDetail.items.map { item ->
-                    toRegularRow(item.label, item.target, listCounts[item.kode] ?: 0, item.bestSeller)
-                }.toMutableList()
-                rows.add(toZeroRow("${listDetail.jenisAlias}-000", zeroCount))
+                if (applyBsFilter) {
+                    if (itemsToProcess.isNotEmpty()) {
+                        val rows = itemsToProcess.map { item ->
+                            toRegularRow(item.label, item.target, listCounts[item.kode] ?: 0, item.bestSeller)
+                        }
+                        tables.add(
+                            ExportTableSection(
+                                title = listDetail.nama,
+                                rows = rows
+                            )
+                        )
+                    }
+                } else {
+                    val rows = itemsToProcess.map { item ->
+                        toRegularRow(item.label, item.target, listCounts[item.kode] ?: 0, item.bestSeller)
+                    }.toMutableList()
+                    rows.add(toZeroRow("${listDetail.jenisAlias}-000", zeroCount))
 
-                tables.add(
-                    ExportTableSection(
-                        title = listDetail.nama,
-                        rows = rows
+                    tables.add(
+                        ExportTableSection(
+                            title = listDetail.nama,
+                            rows = rows
+                        )
                     )
-                )
+                }
             }
         }
 
